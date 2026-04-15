@@ -10,8 +10,18 @@ export default function OrdenesPage() {
 
   useEffect(() => {
     const stored = localStorage.getItem("demo-assets");
+
     if (stored) {
-      setAssets(JSON.parse(stored));
+      const parsed = JSON.parse(stored);
+
+      // 🔥 SOLO LOS CAMPOS QUE NECESITA OT
+      const formatted = parsed.map((a: any) => ({
+        id: a.id,
+        tag: a.tag,
+        name: a.name
+      }));
+
+      setAssets(formatted);
     }
   }, []);
 
