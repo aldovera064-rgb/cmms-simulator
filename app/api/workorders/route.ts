@@ -1,3 +1,4 @@
+export const runtime = "nodejs";
 import { NextResponse } from "next/server";
 
 import { createWorkOrder, getWorkOrders } from "@/features/work-orders/server";
