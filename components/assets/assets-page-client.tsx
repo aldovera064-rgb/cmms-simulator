@@ -64,19 +64,22 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
       const isEditing = Boolean(editingAsset);
 
       const newAsset: AssetListItem = {
-        id: isEditing ? editingAsset!.id : Date.now().toString(),
-        tag: values.tag,
-        name: values.name || "",
-        area: values.area || "",
-        criticality: values.criticality || "B",
-        status: "OPERATIVE", // ✅ ya corregido
-        manufacturer: "",
-        model: "",
-        serialNumber: "",
-        installationDate: new Date().toISOString(),
-        lastFailureAt: null,
-        technicalSpecifications: ""
-      };
+  id: isEditing ? editingAsset!.id : Date.now().toString(),
+  tag: values.tag,
+  name: values.name || "",
+  area: values.area || "",
+  criticality: values.criticality || "B",
+  status: "OPERATIVE",
+
+  // 🔥 ESTO ES LO QUE TE FALTA
+  manufacturer: values.manufacturer || "",
+  model: values.model || "",
+  serialNumber: values.serialNumber || "",
+  technicalSpecifications: values.technicalSpecifications || "",
+
+  installationDate: new Date().toISOString(),
+  lastFailureAt: null
+};
 
       setAssets((current) => {
         if (isEditing) {
