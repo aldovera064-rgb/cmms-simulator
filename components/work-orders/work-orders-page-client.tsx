@@ -34,6 +34,9 @@ export function WorkOrdersPageClient({ initialWorkOrders, assets }: Props) {
     return stored ? JSON.parse(stored) : initialWorkOrders;
   });
 
+  // 🔥 ESTE ES EL FIX IMPORTANTE
+  const [assetsState, setAssets] = useState<AssetOption[]>(assets);
+
   const [filters, setFilters] = useState<WorkOrderFilters>({
     status: "ALL",
     priority: "ALL",
@@ -44,17 +47,35 @@ export function WorkOrdersPageClient({ initialWorkOrders, assets }: Props) {
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedWorkOrder, setSelectedWorkOrder] = useState<WorkOrderListItem | null>(null);
 
-  // ⏱ reloj SLA (opcional)
+  // ⏱ reloj SLA
   const [nowTick, setNowTick] = useState(Date.now());
+
   useEffect(() => {
     const interval = setInterval(() => setNowTick(Date.now()), 1000);
     return () => clearInterval(interval);
   }, []);
 
-  // 💾 guardar en localStorage
+  // 💾 guardar OT
   useEffect(() => {
     localStorage.setItem("demo-workorders", JSON.stringify(workOrders));
   }, [workOrders]);
+
+  // 🔥 CARGAR ACTIVOS DESDE LOCALSTORAGE
+  useEffect(() => {
+    const stored = localStorage.getItem("demo-assets");
+
+    if (stored) {
+      const parsed = JSON.parse(stored);
+
+      const formatted = parsed.map((a: any) => ({
+        id: a.id,
+        tag: a.tag,
+        name: a.name
+      }));
+
+      setAssets(formatted);
+    }
+  }, []);
 
   // 🔍 filtros
   const visibleWorkOrders = useMemo(() => {
@@ -69,7 +90,7 @@ export function WorkOrdersPageClient({ initialWorkOrders, assets }: Props) {
 
   // 🔥 CREATE
   function handleCreate(values: WorkOrderCreateInput) {
-    const asset = assets.find((a) => a.id === values.assetId);
+    const asset = assetsState.find((a) => a.id === values.assetId);
 
     const newWO = {
       id: Date.now().toString(),
@@ -133,7 +154,9 @@ export function WorkOrdersPageClient({ initialWorkOrders, assets }: Props) {
           }
         >
           <option value="ALL">Todos los activos</option>
-          {assets.map((a) => (
+
+          {/* 🔥 USAR assetsState */}
+          {assetsState.map((a) => (
             <option key={a.id} value={a.id}>
               {a.tag}
             </option>
@@ -142,8 +165,8 @@ export function WorkOrdersPageClient({ initialWorkOrders, assets }: Props) {
       </Panel>
 
       <Panel>
-  <div className="overflow-x-auto">
-    <table className="min-w-full">
+        <div className="overflow-x-auto w-full">
+          <table className="min-w-full text-sm">
             <thead>
               <tr>
                 <th className="px-4 py-2">OT</th>
@@ -177,7 +200,7 @@ export function WorkOrdersPageClient({ initialWorkOrders, assets }: Props) {
       </Panel>
 
       <WorkOrderFormModal
-        assets={assets}
+        assets={assetsState}
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onSubmit={handleCreate}
