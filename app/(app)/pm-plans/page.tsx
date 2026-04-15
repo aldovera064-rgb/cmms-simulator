@@ -1,5 +1,5 @@
-import { ModulePage } from "@/components/ui/module-page";
+﻿import { PMPlansPageClient } from "@/components/pm-plans/pm-plans-page-client";
 
-export default function PmPlansPage() {
-  return <ModulePage moduleKey="pmPlans" />;
+export default function PMPlansPage() {
+  return <PMPlansPageClient initialPlans={[]} />;
 }
