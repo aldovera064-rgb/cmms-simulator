@@ -17,6 +17,9 @@ type RouteContext = {
 };
 
 export async function GET(_request: Request, context: RouteContext) {
+   if (process.env.VERCEL_ENV === "production") {
+    return NextResponse.json(null);
+  }
   const { id } = await context.params;
   const asset = await getAssetById(id);
 
@@ -28,6 +31,9 @@ export async function GET(_request: Request, context: RouteContext) {
 }
 
 export async function PUT(request: Request, context: RouteContext) {
+  if (process.env.VERCEL_ENV === "production") {
+    return NextResponse.json({ error: "Simulador en produccion" });
+  }
   const { id } = await context.params;
   const payload = (await request.json()) as Partial<AssetFormValues & AssetDetailUpdateInput>;
   const isPartialDetailUpdate = !("tag" in payload);
@@ -98,6 +104,9 @@ export async function PUT(request: Request, context: RouteContext) {
 }
 
 export async function DELETE(_request: Request, context: RouteContext) {
+   if (process.env.VERCEL_ENV === "production") {
+    return NextResponse.json({ ok: true });
+  }
   const { id } = await context.params;
 
   const related = await prisma.asset.findUnique({

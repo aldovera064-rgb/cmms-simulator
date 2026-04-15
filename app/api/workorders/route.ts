@@ -11,6 +11,10 @@ import {
 } from "@/types/work-orders";
 
 export async function GET(request: Request) {
+   if (process.env.VERCEL_ENV === "production") {
+    return NextResponse.json([]);
+  }
+
   const { searchParams } = new URL(request.url);
   const filters: WorkOrderFilters = {
     status: (searchParams.get("status") as WorkOrderStatusValue | "ALL" | null) ?? undefined,
@@ -24,6 +28,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  if (process.env.VERCEL_ENV === "production") {
+    return NextResponse.json({ error: "Simulador en produccion" });
+  }
   const payload = (await request.json()) as Partial<WorkOrderCreateInput>;
 
   if (!payload.assetId || !payload.type || !payload.priority || !payload.description) {

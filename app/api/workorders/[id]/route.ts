@@ -12,6 +12,9 @@ type RouteContext = {
 };
 
 export async function GET(_request: Request, context: RouteContext) {
+   if (process.env.VERCEL_ENV === "production") {
+    return NextResponse.json(null);
+  }
   const { id } = await context.params;
   const workOrder = await getWorkOrderById(id);
 
@@ -23,6 +26,9 @@ export async function GET(_request: Request, context: RouteContext) {
 }
 
 export async function PUT(request: Request, context: RouteContext) {
+   if (process.env.VERCEL_ENV === "production") {
+    return NextResponse.json({ error: "Simulador en produccion" });
+  }
   const { id } = await context.params;
   const payload = (await request.json()) as WorkOrderUpdateInput;
   const result = await updateWorkOrder(id, payload);
@@ -35,6 +41,9 @@ export async function PUT(request: Request, context: RouteContext) {
 }
 
 export async function DELETE(_request: Request, context: RouteContext) {
+  if (process.env.VERCEL_ENV === "production") {
+    return NextResponse.json({ ok: true });
+  }
   const { id } = await context.params;
 
   const workOrder = await prisma.workOrder.findUnique({

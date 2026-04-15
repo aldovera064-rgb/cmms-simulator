@@ -7,11 +7,21 @@ import { prisma } from "@/lib/prisma";
 import { AssetFormValues } from "@/types/assets";
 
 export async function GET() {
+  if (process.env.VERCEL_ENV === "production") {
+    return NextResponse.json([]);
+  }
+
   const assets = await getAssets();
   return NextResponse.json(assets);
 }
 
 export async function POST(request: Request) {
+   if (process.env.VERCEL_ENV === "production") {
+    return NextResponse.json(
+      { error: "Simulador en produccion" },
+      { status: 200 }
+    );
+  }
   const payload = (await request.json()) as Partial<AssetFormValues>;
   const parsed = parseAssetPayload(payload);
 

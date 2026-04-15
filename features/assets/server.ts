@@ -78,6 +78,10 @@ function normalizeAssetDetail(asset: {
 }
 
 export async function getAssets() {
+  if (process.env.VERCEL_ENV === "production") {
+    return [];
+  }
+
   const assets = await prisma.asset.findMany({
     orderBy: [{ criticality: "asc" }, { tag: "asc" }],
     select: {
@@ -100,6 +104,10 @@ export async function getAssets() {
 }
 
 export async function getAssetById(id: string) {
+    if (process.env.VERCEL_ENV === "production") {
+    return null;
+  }
+
   const asset = await prisma.asset.findUnique({
     where: { id },
     select: {

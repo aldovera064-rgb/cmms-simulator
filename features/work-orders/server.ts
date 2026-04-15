@@ -87,6 +87,9 @@ function getWorkOrderSelect() {
 }
 
 export async function getWorkOrders(filters: WorkOrderFilters = {}) {
+   if (process.env.VERCEL_ENV === "production") {
+    return [];
+  }
   const where: Prisma.WorkOrderWhereInput = {};
 
   if (filters.status && filters.status !== "ALL") {
@@ -115,6 +118,9 @@ export async function getWorkOrders(filters: WorkOrderFilters = {}) {
 }
 
 export async function getWorkOrderById(id: string) {
+   if (process.env.VERCEL_ENV === "production") {
+    return null;
+  }
   const workOrder = await prisma.workOrder.findUnique({
     where: { id },
     select: getWorkOrderSelect()
@@ -145,6 +151,10 @@ async function getNextWorkOrderNumber() {
 }
 
 export async function createWorkOrder(input: WorkOrderCreateInput) {
+   if (process.env.VERCEL_ENV === "production") {
+    return { error: "Simulador en produccion" as const };
+  }
+
   const asset = await prisma.asset.findUnique({
     where: { id: input.assetId },
     select: { id: true }
@@ -176,6 +186,9 @@ export async function createWorkOrder(input: WorkOrderCreateInput) {
 }
 
 export async function updateWorkOrder(id: string, input: WorkOrderUpdateInput) {
+   if (process.env.VERCEL_ENV === "production") {
+    return { error: "Simulador en produccion" as const };
+  }
   const current = await prisma.workOrder.findUnique({
     where: { id },
     select: {
