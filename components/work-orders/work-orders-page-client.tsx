@@ -27,15 +27,13 @@ type Props = {
   assets: AssetOption[];
 };
 
-export function WorkOrdersPageClient({ initialWorkOrders, assets }: Props) {
+export function WorkOrdersPageClient({ initialWorkOrders }: Props) {
+  const [assets, setAssets] = useState<AssetOption[]>([]);
   const [workOrders, setWorkOrders] = useState<WorkOrderListItem[]>(() => {
     if (typeof window === "undefined") return initialWorkOrders;
     const stored = localStorage.getItem("demo-workorders");
     return stored ? JSON.parse(stored) : initialWorkOrders;
   });
-
-  // 🔥 ESTE ES EL FIX IMPORTANTE
-  const [assetsState, setAssets] = useState<AssetOption[]>(assets);
 
   const [filters, setFilters] = useState<WorkOrderFilters>({
     status: "ALL",
@@ -47,50 +45,35 @@ export function WorkOrdersPageClient({ initialWorkOrders, assets }: Props) {
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedWorkOrder, setSelectedWorkOrder] = useState<WorkOrderListItem | null>(null);
 
-  // ⏱ reloj SLA
-  const [nowTick, setNowTick] = useState(Date.now());
-
+  // 🔥 cargar activos correctamente
   useEffect(() => {
-    const interval = setInterval(() => setNowTick(Date.now()), 1000);
-    return () => clearInterval(interval);
+    const stored = localStorage.getItem("demo-assets");
+    if (stored) {
+      const parsed = JSON.parse(stored);
+      setAssets(
+        parsed.map((a: any) => ({
+          id: a.id,
+          tag: a.tag,
+          name: a.name
+        }))
+      );
+    }
   }, []);
 
-  // 💾 guardar OT
+  // 💾 persistencia OT
   useEffect(() => {
     localStorage.setItem("demo-workorders", JSON.stringify(workOrders));
   }, [workOrders]);
 
-  // 🔥 CARGAR ACTIVOS DESDE LOCALSTORAGE
-  useEffect(() => {
-    const stored = localStorage.getItem("demo-assets");
-
-    if (stored) {
-      const parsed = JSON.parse(stored);
-
-      const formatted = parsed.map((a: any) => ({
-        id: a.id,
-        tag: a.tag,
-        name: a.name
-      }));
-
-      setAssets(formatted);
-    }
-  }, []);
-
-  // 🔍 filtros
   const visibleWorkOrders = useMemo(() => {
     return workOrders.filter((w) => {
-      if (filters.status !== "ALL" && w.status !== filters.status) return false;
-      if (filters.priority !== "ALL" && w.priority !== filters.priority) return false;
-      if (filters.type !== "ALL" && w.type !== filters.type) return false;
       if (filters.assetId !== "ALL" && w.assetId !== filters.assetId) return false;
       return true;
     });
   }, [filters, workOrders]);
 
-  // 🔥 CREATE
   function handleCreate(values: WorkOrderCreateInput) {
-    const asset = assetsState.find((a) => a.id === values.assetId);
+    const asset = assets.find((a) => a.id === values.assetId);
 
     const newWO = {
       id: Date.now().toString(),
@@ -108,32 +91,27 @@ export function WorkOrdersPageClient({ initialWorkOrders, assets }: Props) {
       closedAt: null
     } as WorkOrderListItem;
 
-    setWorkOrders((current) => sortWorkOrders([newWO, ...current]));
+    setWorkOrders((c) => [newWO, ...c]);
     setCreateOpen(false);
   }
 
-  // 🔥 UPDATE
   async function handleUpdate(values: WorkOrderUpdateInput) {
     if (!selectedWorkOrder) return;
 
-    const updated = {
-      ...selectedWorkOrder,
-      ...values
-    };
+    const updated = { ...selectedWorkOrder, ...values };
 
-    setWorkOrders((current) =>
-      sortWorkOrders(current.map((w) => (w.id === updated.id ? updated : w)))
+    setWorkOrders((c) =>
+      c.map((w) => (w.id === updated.id ? updated : w))
     );
 
     setSelectedWorkOrder(updated);
   }
 
-  // 🔥 DELETE
   async function handleDelete() {
     if (!selectedWorkOrder) return;
 
-    setWorkOrders((current) =>
-      current.filter((w) => w.id !== selectedWorkOrder.id)
+    setWorkOrders((c) =>
+      c.filter((w) => w.id !== selectedWorkOrder.id)
     );
 
     setSelectedWorkOrder(null);
@@ -154,9 +132,7 @@ export function WorkOrdersPageClient({ initialWorkOrders, assets }: Props) {
           }
         >
           <option value="ALL">Todos los activos</option>
-
-          {/* 🔥 USAR assetsState */}
-          {assetsState.map((a) => (
+          {assets.map((a) => (
             <option key={a.id} value={a.id}>
               {a.tag}
             </option>
@@ -169,29 +145,19 @@ export function WorkOrdersPageClient({ initialWorkOrders, assets }: Props) {
           <table className="min-w-full text-sm">
             <thead>
               <tr>
-                <th className="px-4 py-2">OT</th>
-                <th className="px-4 py-2">Activo</th>
-                <th className="px-4 py-2">Prioridad</th>
-                <th className="px-4 py-2">Estado</th>
-                <th className="px-4 py-2"></th>
+                <th>OT</th>
+                <th>Activo</th>
+                <th>Prioridad</th>
+                <th>Estado</th>
               </tr>
             </thead>
             <tbody>
               {visibleWorkOrders.map((w) => (
                 <tr key={w.id}>
-                  <td className="px-4 py-2">{w.number}</td>
-                  <td className="px-4 py-2">{w.assetTag}</td>
-                  <td className="px-4 py-2">
-                    <WorkOrderPriorityBadge value={w.priority} />
-                  </td>
-                  <td className="px-4 py-2">
-                    <WorkOrderStatusBadge value={w.status} />
-                  </td>
-                  <td className="px-4 py-2 text-right">
-                    <Button onClick={() => setSelectedWorkOrder(w)}>
-                      Ver
-                    </Button>
-                  </td>
+                  <td>{w.number}</td>
+                  <td>{w.assetTag}</td>
+                  <td><WorkOrderPriorityBadge value={w.priority} /></td>
+                  <td><WorkOrderStatusBadge value={w.status} /></td>
                 </tr>
               ))}
             </tbody>
@@ -200,7 +166,7 @@ export function WorkOrdersPageClient({ initialWorkOrders, assets }: Props) {
       </Panel>
 
       <WorkOrderFormModal
-        assets={assetsState}
+        assets={assets}
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onSubmit={handleCreate}
@@ -214,13 +180,5 @@ export function WorkOrdersPageClient({ initialWorkOrders, assets }: Props) {
         onDelete={handleDelete}
       />
     </div>
-  );
-}
-
-function sortWorkOrders(items: WorkOrderListItem[]) {
-  return [...items].sort(
-    (a, b) =>
-      new Date(b.createdAt).getTime() -
-      new Date(a.createdAt).getTime()
   );
 }
