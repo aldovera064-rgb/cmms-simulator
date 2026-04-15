@@ -1,11 +1,19 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { WorkOrdersPageClient } from "@/components/work-orders/work-orders-page-client";
-import { getWorkOrders } from "@/features/work-orders/server";
+import { demoWorkOrders } from "@/lib/demo/data";
 
-export const dynamic = "force-dynamic";
+export default function OrdenesPage() {
+  const [assets, setAssets] = useState<any[]>([]);
+  const [workOrders, setWorkOrders] = useState<any[]>(demoWorkOrders);
 
-export default async function OrdenesPage() {
-  const workOrders = await getWorkOrders();
-  const assets: any[] = [];
+  useEffect(() => {
+    const stored = localStorage.getItem("demo-assets");
+    if (stored) {
+      setAssets(JSON.parse(stored));
+    }
+  }, []);
 
   return (
     <WorkOrdersPageClient

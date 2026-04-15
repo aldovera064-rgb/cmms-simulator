@@ -142,8 +142,8 @@ export function WorkOrdersPageClient({ initialWorkOrders, assets }: Props) {
       </Panel>
 
       <Panel>
-        <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
+  <div className="overflow-x-auto">
+    <table className="min-w-full">
             <thead>
               <tr>
                 <th className="px-4 py-2">OT</th>
