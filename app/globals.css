@@ -1,0 +1,56 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-sans: "Bahnschrift";
+  --color-background: #09131c;
+  --color-panel: #101e2b;
+  --color-panel-alt: #162636;
+  --color-border: #274053;
+  --color-foreground: #ecf3f9;
+  --color-muted: #98afc2;
+  --color-accent: #f59e0b;
+  --color-accent-soft: rgba(245, 158, 11, 0.12);
+  --color-success: #34d399;
+  --color-warning: #fbbf24;
+  --color-danger: #f87171;
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+html {
+  background:
+    radial-gradient(circle at top, rgba(245, 158, 11, 0.12), transparent 28%),
+    linear-gradient(180deg, #08121b 0%, #0d1722 100%);
+}
+
+body {
+  min-height: 100vh;
+  color: var(--color-foreground);
+  background:
+    radial-gradient(circle at top right, rgba(56, 189, 248, 0.08), transparent 26%),
+    linear-gradient(180deg, rgba(9, 19, 28, 0.96), rgba(9, 19, 28, 1)),
+    var(--color-background);
+  background-size: cover;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  outline: none;
+}
+
+.industrial-grid {
+  background-image: linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
+  background-size: 28px 28px;
+}

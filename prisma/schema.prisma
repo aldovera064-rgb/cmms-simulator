@@ -1,0 +1,228 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  TECHNICIAN
+}
+
+enum AssetCriticality {
+  A
+  B
+  C
+}
+
+enum AssetStatus {
+  OPERATIVE
+  MAINTENANCE
+  OUT_OF_SERVICE
+}
+
+enum WorkOrderType {
+  CORRECTIVE
+  PREVENTIVE
+  PREDICTIVE
+}
+
+enum WorkOrderPriority {
+  P1
+  P2
+  P3
+  P4
+}
+
+enum WorkOrderStatus {
+  OPEN
+  IN_PROGRESS
+  ON_HOLD
+  CLOSED
+}
+
+enum PmStatus {
+  ACTIVE
+  PAUSED
+}
+
+enum TrafficLightStatus {
+  GREEN
+  YELLOW
+  RED
+}
+
+enum NoteEntityType {
+  ASSET
+  WORK_ORDER
+  PM_PLAN
+  TECHNICIAN
+  SPARE_PART
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  password     String
+  role         UserRole
+  technicianId String?  @unique
+  technician   Technician? @relation(fields: [technicianId], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Technician {
+  id                  String               @id @default(cuid())
+  name                String
+  email               String               @unique
+  specialty           String
+  shift               String
+  phone               String?
+  active              Boolean              @default(true)
+  workOrders          WorkOrder[]          @relation("WorkOrderTechnician")
+  scheduleAssignments ScheduleAssignment[]
+  user                User?
+  notes               Note[]
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+}
+
+model Asset {
+  id                    String         @id @default(cuid())
+  tag                   String         @unique
+  name                  String
+  description           String
+  area                  String
+  criticality           AssetCriticality
+  status                AssetStatus    @default(OPERATIVE)
+  manufacturer          String
+  model                 String
+  serialNumber          String
+  installationDate      DateTime
+  lastFailureAt         DateTime?
+  technicalSpecifications String
+  operatingSince        DateTime
+  baselineOperatingHours Int          @default(0)
+  workOrders            WorkOrder[]
+  pmPlans               PmPlan[]
+  notes                 Note[]
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+}
+
+model WorkOrder {
+  id                String                @id @default(cuid())
+  number            String                @unique
+  assetId           String
+  asset             Asset                 @relation(fields: [assetId], references: [id])
+  type              WorkOrderType
+  priority          WorkOrderPriority
+  technicianId      String?
+  technician        Technician?           @relation("WorkOrderTechnician", fields: [technicianId], references: [id])
+  technicianName    String                @default("")
+  status            WorkOrderStatus       @default(OPEN)
+  description       String
+  dueDate           DateTime?
+  startedAt         DateTime?
+  closedAt          DateTime?
+  rootCause         String?
+  workPerformed     String?
+  repairTimeMinutes Int?
+  pmPlanId          String?
+  pmPlan            PmPlan?               @relation(fields: [pmPlanId], references: [id])
+  materials         WorkOrderMaterial[]
+  notes             Note[]
+  scheduleAssignments ScheduleAssignment[]
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+}
+
+model WorkOrderMaterial {
+  id            String     @id @default(cuid())
+  workOrderId   String
+  workOrder     WorkOrder  @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  sparePartId   String
+  sparePart     SparePart  @relation(fields: [sparePartId], references: [id])
+  quantity      Int
+  unitCost      Float
+  createdAt     DateTime   @default(now())
+}
+
+model SparePart {
+  id            String               @id @default(cuid())
+  code          String               @unique
+  name          String
+  description   String
+  stock         Int
+  unitCost      Float
+  location      String
+  materials     WorkOrderMaterial[]
+  notes         Note[]
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+}
+
+model PmPlan {
+  id                String               @id @default(cuid())
+  code              String               @unique
+  assetId           String
+  asset             Asset                @relation(fields: [assetId], references: [id])
+  title             String
+  description       String
+  frequencyDays     Int
+  status            PmStatus             @default(ACTIVE)
+  trafficLight      TrafficLightStatus   @default(GREEN)
+  nextDueAt         DateTime
+  lastGeneratedAt   DateTime?
+  checklistItems    PmChecklistItem[]
+  generatedWorkOrders WorkOrder[]
+  notes             Note[]
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+}
+
+model PmChecklistItem {
+  id          String   @id @default(cuid())
+  pmPlanId    String
+  pmPlan      PmPlan   @relation(fields: [pmPlanId], references: [id], onDelete: Cascade)
+  label       String
+  sortOrder   Int
+  isRequired  Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ScheduleAssignment {
+  id            String      @id @default(cuid())
+  technicianId  String
+  technician    Technician  @relation(fields: [technicianId], references: [id], onDelete: Cascade)
+  workOrderId   String
+  workOrder     WorkOrder   @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  startAt       DateTime
+  endAt         DateTime
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+}
+
+model Note {
+  id            String         @id @default(cuid())
+  entityType    NoteEntityType
+  entityId      String
+  content       String
+  assetId       String?
+  asset         Asset?         @relation(fields: [assetId], references: [id])
+  workOrderId   String?
+  workOrder     WorkOrder?     @relation(fields: [workOrderId], references: [id])
+  pmPlanId      String?
+  pmPlan        PmPlan?        @relation(fields: [pmPlanId], references: [id])
+  technicianId  String?
+  technician    Technician?    @relation(fields: [technicianId], references: [id])
+  sparePartId   String?
+  sparePart     SparePart?     @relation(fields: [sparePartId], references: [id])
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
