@@ -1,12 +1,11 @@
-import { WorkOrdersPageClient } from "@/components/work-orders/work-orders-page-client";
+import { AssetsPageClient } from "@/components/assets/assets-page-client";
 
 export const dynamic = "force-dynamic";
 
-export default function OrdenesPage() {
+export default function ActivosPage() {
   return (
-    <WorkOrdersPageClient
-      assets={[]}
-      initialWorkOrders={[]}
+    <AssetsPageClient
+      initialAssets={[]}
     />
   );
 }
