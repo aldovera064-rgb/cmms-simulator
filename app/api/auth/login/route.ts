@@ -1,7 +1,4 @@
 import { NextResponse } from "next/server";
-import { UserRole } from "@prisma/client";
-
-import { prisma } from "@/lib/prisma";
 
 export async function POST(request: Request) {
   const body = (await request.json()) as { email?: string; password?: string };
@@ -9,6 +6,31 @@ export async function POST(request: Request) {
   if (!body.email || !body.password) {
     return NextResponse.json({ error: "Missing credentials." }, { status: 400 });
   }
+
+  // MODO DEMO (Vercel)
+  if (process.env.VERCEL_ENV === "production") {
+    if (
+      body.email === "admin@cmms.local" &&
+      body.password === "admin123"
+    ) {
+      return NextResponse.json({
+        id: "demo-admin",
+        email: "admin@cmms.local",
+        name: "Admin Demo",
+        role: "admin",
+        technicianId: null
+      });
+    }
+
+    return NextResponse.json(
+      { error: "Credenciales inválidas para el simulador." },
+      { status: 401 }
+    );
+  }
+
+  // LOCAL (usa Prisma)
+  const { prisma } = await import("@/lib/prisma");
+  const { UserRole } = await import("@prisma/client");
 
   const user = await prisma.user.findUnique({
     where: {
