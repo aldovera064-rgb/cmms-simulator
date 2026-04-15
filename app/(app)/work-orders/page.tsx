@@ -1,5 +1,3 @@
-import { redirect } from "next/navigation";
-
-export default function WorkOrdersPage() {
-  redirect("/ordenes");
+export default function Page() {
+  return null;
 }

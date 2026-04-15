@@ -1,10 +1,12 @@
-import { AssetsPageClient } from "@/components/assets/assets-page-client";
-import { getAssets } from "@/features/assets/server";
+import { WorkOrdersPageClient } from "@/components/work-orders/work-orders-page-client";
 
 export const dynamic = "force-dynamic";
 
-export default async function ActivosPage() {
-  const assets = await getAssets();
-
-  return <AssetsPageClient initialAssets={assets} />;
+export default function OrdenesPage() {
+  return (
+    <WorkOrdersPageClient
+      assets={[]}
+      initialWorkOrders={[]}
+    />
+  );
 }
