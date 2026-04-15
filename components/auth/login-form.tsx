@@ -44,8 +44,10 @@ export function LoginForm() {
       }
 
       const user = (await response.json()) as SessionUser;
-      signIn(user);
-      router.replace("/dashboard");
+      localStorage.setItem("user", JSON.stringify(user));
+signIn(user);
+
+router.replace("/dashboard");
     } catch {
       setError(dictionary.auth.invalid);
     } finally {
