@@ -1,14 +1,40 @@
-"use client";
+﻿"use client";
 
 import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 
 import { useI18n } from "@/lib/i18n/context";
 import { useSession } from "@/lib/session/context";
+
+function normalizeCountry(value: string) {
+  if (!value) return "mx";
+  if (value === "🇲🇽") return "mx";
+  if (value === "🇺🇸") return "us";
+  if (value === "🇨🇦") return "ca";
+  if (value === "🏳️‍🌈") return "pride";
+  if (value === "mx" || value === "us" || value === "ca" || value === "pride") return value;
+  return "mx";
+}
 
 export function Topbar() {
   const router = useRouter();
   const { dictionary, locale, setLocale } = useI18n();
   const { user, signOut } = useSession();
+  const [cookieUser, setCookieUser] = useState("");
+  const [cookieCountry, setCookieCountry] = useState("mx");
+
+  useEffect(() => {
+    const cookies = document.cookie.split("; ").reduce<Record<string, string>>((acc, current) => {
+      const [key, ...value] = current.split("=");
+      if (key) {
+        acc[key] = decodeURIComponent(value.join("="));
+      }
+      return acc;
+    }, {});
+
+    setCookieUser(cookies["cmms-user"] ?? "");
+    setCookieCountry(normalizeCountry(cookies["cmms-country"] ?? ""));
+  }, [user]);
 
   const handleSignOut = () => {
     signOut();
@@ -18,9 +44,7 @@ export function Topbar() {
   return (
     <header className="flex flex-col gap-4 border-b border-border bg-panel/60 px-5 py-4 backdrop-blur md:flex-row md:items-center md:justify-between">
       <div>
-        <p className="text-xs uppercase tracking-[0.24em] text-accent">
-          {dictionary.shell.welcome}
-        </p>
+        <p className="text-xs uppercase tracking-[0.24em] text-accent">{dictionary.shell.welcome}</p>
         <p className="mt-2 text-sm text-muted">
           {dictionary.shell.sessionRole}: {user?.role ?? "-"}
         </p>
@@ -42,8 +66,9 @@ export function Topbar() {
           ))}
         </div>
 
-        <div className="rounded-2xl border border-border bg-panelAlt/80 px-4 py-2 text-sm">
-          {user?.name ?? "Demo User"}
+        <div className="rounded-2xl border border-border bg-panelAlt/80 px-3 py-2 text-sm flex items-center gap-2">
+          <img src={`/flags/${cookieCountry}.svg`} className="w-4 h-4" alt={cookieCountry} />
+          <span>{cookieUser || user?.name || "Admin"}</span>
         </div>
 
         <button

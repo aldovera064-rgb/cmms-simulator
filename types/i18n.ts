@@ -1,4 +1,4 @@
-export type Locale = "es" | "en";
+﻿export type Locale = "es" | "en";
 
 export type Dictionary = {
   appName: string;
@@ -13,9 +13,15 @@ export type Dictionary = {
   auth: {
     title: string;
     subtitle: string;
-    email: string;
+    username: string;
     password: string;
-    submit: string;
+    login: string;
+    createAccount: string;
+    loginMode: string;
+    signupMode: string;
+    country: string;
+    selectCountry: string;
+    passwordMin: string;
     helper: string;
     invalid: string;
   };
@@ -37,6 +43,19 @@ export type Dictionary = {
     technicians: string;
     foundationStatus: string;
     foundationDescription: string;
+    assetsChart: string;
+    workOrdersChart: string;
+    pmChart: string;
+    open: string;
+    inProgress: string;
+    overdue: string;
+    closed: string;
+    pmLabel: string;
+    correctiveLabel: string;
+    availability: string;
+    mttr: string;
+    mtbf: string;
+    overdueWorkOrders: string;
   };
   modules: {
     title: string;

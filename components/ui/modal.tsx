@@ -13,7 +13,7 @@ type ModalProps = {
 };
 
 export function Modal({ open, title, description, children, onClose }: ModalProps) {
-  if (!open) {
+  if (open !== true) {
     return null;
   }
 
@@ -27,14 +27,14 @@ export function Modal({ open, title, description, children, onClose }: ModalProp
       />
       <div
         className={cn(
-          "relative z-10 w-full max-w-3xl rounded-panel border border-border bg-panel shadow-panel"
+          "relative z-10 w-full max-w-2xl max-h-[90vh] overflow-hidden rounded-panel border border-border bg-panel shadow-panel"
         )}
       >
         <div className="border-b border-border px-6 py-5">
           <h2 className="text-2xl font-semibold">{title}</h2>
           {description ? <p className="mt-2 text-sm text-muted">{description}</p> : null}
         </div>
-        <div className="px-6 py-6">{children}</div>
+        <div className="max-h-[calc(90vh-6.5rem)] overflow-y-auto px-6 py-6">{children}</div>
       </div>
     </div>
   );

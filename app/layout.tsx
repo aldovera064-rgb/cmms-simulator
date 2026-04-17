@@ -1,18 +1,19 @@
+﻿import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import type { Metadata } from "next";
 
 import { AppProviders } from "@/components/providers/app-providers";
-import "@/app/globals.css";
+
+import "./globals.css";
 
 export const metadata: Metadata = {
   title: "CMMS Simulator",
-  description: "Industrial maintenance simulator built with Next.js and Prisma."
+  description: "CMMS demo app"
 };
 
-export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
+export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="es">
-      <body>
+      <body className="bg-main text-foreground">
         <AppProviders>{children}</AppProviders>
       </body>
     </html>

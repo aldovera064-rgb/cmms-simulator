@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useMemo, useState } from "react";
 
@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { useI18n } from "@/lib/i18n/context";
 import { WorkOrderCreateInput } from "@/types/work-orders";
 
 type AssetOption = {
@@ -15,9 +16,15 @@ type AssetOption = {
   name: string;
 };
 
+type TechnicianOption = {
+  id: string;
+  name: string;
+};
+
 type WorkOrderFormModalProps = {
   open: boolean;
   assets: AssetOption[];
+  technicians: TechnicianOption[];
   loading?: boolean;
   error?: string;
   onClose: () => void;
@@ -35,13 +42,50 @@ const initialValues: WorkOrderCreateInput = {
 export function WorkOrderFormModal({
   open,
   assets,
+  technicians,
   loading,
   error,
   onClose,
   onSubmit
 }: WorkOrderFormModalProps) {
+  const { locale } = useI18n();
   const [values, setValues] = useState<WorkOrderCreateInput>(initialValues);
   const [search, setSearch] = useState("");
+
+  const copy =
+    locale === "en"
+      ? {
+          title: "New Work Order",
+          description: "Register a real work order linked to an asset.",
+          searchAsset: "Search asset by TAG",
+          asset: "Asset",
+          selectAsset: "Select an asset",
+          type: "Type",
+          priority: "Priority",
+          technician: "Technician",
+          selectTechnician: "Select a technician",
+          noTechnicians: "No technicians available",
+          details: "Description",
+          cancel: "Cancel",
+          create: "Create WO",
+          creating: "Creating..."
+        }
+      : {
+          title: "Nueva OT",
+          description: "Registra una orden de trabajo real ligada a un activo del sistema.",
+          searchAsset: "Buscar activo por TAG",
+          asset: "Activo",
+          selectAsset: "Selecciona un activo",
+          type: "Tipo",
+          priority: "Prioridad",
+          technician: "Técnico",
+          selectTechnician: "Selecciona un técnico",
+          noTechnicians: "Sin técnicos disponibles",
+          details: "Descripción",
+          cancel: "Cancelar",
+          create: "Crear OT",
+          creating: "Creando..."
+        };
 
   const filteredAssets = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -49,15 +93,11 @@ export function WorkOrderFormModal({
       return assets;
     }
 
-    return assets.filter((asset) =>
-      `${asset.tag} ${asset.name}`.toLowerCase().includes(query)
-    );
+    return assets.filter((asset) => `${asset.tag} ${asset.name}`.toLowerCase().includes(query));
   }, [assets, search]);
 
   const closeModal = () => {
-    if (loading) {
-      return;
-    }
+    if (loading) return;
 
     setValues(initialValues);
     setSearch("");
@@ -65,38 +105,27 @@ export function WorkOrderFormModal({
   };
 
   return (
-    <Modal
-      description="Registra una orden de trabajo real ligada a un activo del sistema."
-      onClose={closeModal}
-      open={open}
-      title="Nueva OT"
-    >
+    <Modal description={copy.description} onClose={closeModal} open={open} title={copy.title}>
       <form
-        className="space-y-5"
+        className="space-y-5 max-h-[75vh] overflow-y-auto pr-1"
         onSubmit={(event) => {
           event.preventDefault();
           onSubmit(values);
         }}
       >
         <label className="block space-y-2">
-          <span className="text-sm text-muted">Buscar activo por TAG</span>
-          <Input
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="MX-PMP-101"
-            value={search}
-          />
+          <span className="text-sm text-muted">{copy.searchAsset}</span>
+          <Input onChange={(event) => setSearch(event.target.value)} placeholder="MX-PMP-101" value={search} />
         </label>
 
         <label className="block space-y-2">
-          <span className="text-sm text-muted">Activo</span>
+          <span className="text-sm text-muted">{copy.asset}</span>
           <Select
-            onChange={(event) =>
-              setValues((current) => ({ ...current, assetId: event.target.value }))
-            }
+            onChange={(event) => setValues((current) => ({ ...current, assetId: event.target.value }))}
             required
             value={values.assetId}
           >
-            <option value="">Selecciona un activo</option>
+            <option value="">{copy.selectAsset}</option>
             {filteredAssets.map((asset) => (
               <option key={asset.id} value={asset.id}>
                 {asset.tag} - {asset.name}
@@ -107,7 +136,7 @@ export function WorkOrderFormModal({
 
         <div className="grid gap-4 md:grid-cols-2">
           <label className="block space-y-2">
-            <span className="text-sm text-muted">Tipo</span>
+            <span className="text-sm text-muted">{copy.type}</span>
             <Select
               onChange={(event) =>
                 setValues((current) => ({
@@ -124,7 +153,7 @@ export function WorkOrderFormModal({
           </label>
 
           <label className="block space-y-2">
-            <span className="text-sm text-muted">Prioridad</span>
+            <span className="text-sm text-muted">{copy.priority}</span>
             <Select
               onChange={(event) =>
                 setValues((current) => ({
@@ -143,18 +172,25 @@ export function WorkOrderFormModal({
         </div>
 
         <label className="block space-y-2">
-          <span className="text-sm text-muted">Tecnico</span>
-          <Input
+          <span className="text-sm text-muted">{copy.technician}</span>
+          <Select
             onChange={(event) =>
               setValues((current) => ({ ...current, technicianName: event.target.value }))
             }
-            placeholder="Nombre del tecnico"
             value={values.technicianName}
-          />
+          >
+            <option value="">{copy.selectTechnician}</option>
+            {technicians.map((technician) => (
+              <option key={technician.id} value={technician.name}>
+                {technician.name}
+              </option>
+            ))}
+          </Select>
+          {technicians.length === 0 ? <p className="text-xs text-muted">{copy.noTechnicians}</p> : null}
         </label>
 
         <label className="block space-y-2">
-          <span className="text-sm text-muted">Descripcion</span>
+          <span className="text-sm text-muted">{copy.details}</span>
           <Textarea
             onChange={(event) =>
               setValues((current) => ({ ...current, description: event.target.value }))
@@ -168,10 +204,10 @@ export function WorkOrderFormModal({
 
         <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
           <Button onClick={closeModal} variant="secondary">
-            Cancelar
+            {copy.cancel}
           </Button>
           <Button disabled={loading} type="submit">
-            {loading ? "Creando..." : "Crear OT"}
+            {loading ? copy.creating : copy.create}
           </Button>
         </div>
       </form>

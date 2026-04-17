@@ -20,7 +20,7 @@ export function Sidebar() {
   const { dictionary } = useI18n();
 
   return (
-    <aside className="w-full shrink-0 border-b border-border bg-panel/95 p-4 lg:w-72 lg:border-b-0 lg:border-r">
+    <aside className="w-full shrink-0 border-b border-[#d6d0b8] bg-[#e8e2c8] p-4 lg:w-72 lg:border-b-0 lg:border-r">
       <div className="space-y-6">
         <div>
           <p className="text-xs uppercase tracking-[0.26em] text-accent">CMMS</p>

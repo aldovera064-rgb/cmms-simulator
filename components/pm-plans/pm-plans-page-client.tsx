@@ -4,6 +4,9 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
+import { ensureSeedData, fetchAssets } from "@/lib/cmms-data";
+import { useI18n } from "@/lib/i18n/context";
+import { supabase } from "@/lib/supabase";
 
 type PMPlan = {
   id: string;
@@ -12,6 +15,16 @@ type PMPlan = {
   frequency: number;
   lastRun: string | null;
   nextRun: string;
+};
+
+type PMPlanRow = {
+  id: string;
+  asset_id: string | null;
+  name: string | null;
+  frequency: number | null;
+  last_run: string | null;
+  next_run: string | null;
+  created_at: string | null;
 };
 
 type PMPlansPageClientProps = {
@@ -24,32 +37,92 @@ type AssetOption = {
   name: string;
 };
 
-type WorkOrder = {
-  id: string;
-  number: string;
-  assetId: string;
-  assetTag: string;
-  assetName: string;
-  type: "PREVENTIVE";
-  priority: "MEDIUM";
-  status: "OPEN";
-  description: string;
-  technicianName: string;
-  createdAt: string;
-  dueDate: string;
-  closedAt: null;
-};
+const PM_SEED: Array<Omit<PMPlanRow, "id" | "created_at">> = [
+  {
+    asset_id: "",
+    name: "Inspección general de seguridad",
+    frequency: 30,
+    last_run: null,
+    next_run: toDateOnlyISO(addDays(startOfDay(new Date()), 7))
+  },
+  {
+    asset_id: "",
+    name: "Lubricación de elementos críticos",
+    frequency: 14,
+    last_run: null,
+    next_run: toDateOnlyISO(addDays(startOfDay(new Date()), 3))
+  }
+];
 
-type StoredWorkOrder = {
-  id: string;
-  [key: string]: unknown;
-};
+function mapPlan(row: PMPlanRow): PMPlan | null {
+  if (!row.id || !row.asset_id || !row.name || !row.frequency || !row.next_run) {
+    return null;
+  }
 
-const PM_STORAGE_KEY = "demo-pm-plans";
-const ASSETS_STORAGE_KEY = "demo-assets";
-const WORK_ORDERS_STORAGE_KEY = "demo-workorders";
+  return {
+    id: row.id,
+    assetId: row.asset_id,
+    name: row.name,
+    frequency: row.frequency,
+    lastRun: row.last_run,
+    nextRun: row.next_run
+  };
+}
+
+async function fetchPlans() {
+  const { data } = await supabase.from("pm_plans").select("*").order("next_run", { ascending: true });
+  const rows = (data ?? []) as PMPlanRow[];
+  return rows.map(mapPlan).filter((plan): plan is PMPlan => Boolean(plan));
+}
+
+async function ensurePMSeed(assets: AssetOption[]) {
+  const { count, error } = await supabase.from("pm_plans").select("id", { count: "exact", head: true });
+  if (error || (count ?? 0) > 0 || assets.length === 0) return;
+
+  const insertSeed = PM_SEED.map((item, index) => ({ ...item, asset_id: assets[index % assets.length]?.id ?? assets[0].id }));
+  await supabase.from("pm_plans").insert(insertSeed);
+}
+
+async function autoGenerateWorkOrders(plans: PMPlan[], assets: AssetOption[]) {
+  const today = startOfDay(new Date());
+  const todayIso = toDateOnlyISO(today);
+  const assetsById = new Map(assets.map((asset) => [asset.id, asset]));
+
+  const duePlans = plans.filter((plan) => {
+    const nextRun = parseDateOnly(plan.nextRun);
+    return Boolean(nextRun && nextRun <= today);
+  });
+
+  if (duePlans.length === 0) return;
+
+  const generatedOrders = duePlans.map((plan) => {
+    const asset = assetsById.get(plan.assetId);
+    return {
+      title: `PM: ${plan.name}${asset ? ` - ${asset.name}` : ""}`,
+      priority: "P2",
+      status: "OPEN",
+      type: "PREVENTIVE",
+      technician: ""
+    };
+  });
+
+  await supabase.from("work_orders").insert(generatedOrders);
+
+  await Promise.all(
+    duePlans.map((plan) =>
+      supabase
+        .from("pm_plans")
+        .update({
+          last_run: todayIso,
+          next_run: toDateOnlyISO(addDays(today, plan.frequency))
+        })
+        .eq("id", plan.id)
+    )
+  );
+}
 
 export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
+  const { locale } = useI18n();
   const [plans, setPlans] = useState<PMPlan[]>(initialPlans);
   const [assets, setAssets] = useState<AssetOption[]>([]);
   const [assetId, setAssetId] = useState("");
@@ -57,64 +130,82 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
   const [frequency, setFrequency] = useState("");
   const [nextRunDate, setNextRunDate] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [loaded, setLoaded] = useState(false);
+
+  const copy =
+    locale === "en"
+      ? {
+          title: "PM Plans",
+          subtitle: "CMMS system for industrial maintenance management.",
+          createPlan: "Create PM plan",
+          asset: "Asset",
+          selectAsset: "Select asset",
+          planName: "Plan name",
+          frequency: "Frequency (days)",
+          nextRun: "Next run",
+          save: "Save",
+          create: "Create",
+          cancel: "Cancel",
+          tablePlan: "Plan",
+          tableAsset: "Asset",
+          tableFrequency: "Frequency",
+          tableLastRun: "Last run",
+          tableNextRun: "Next run",
+          tableStatus: "Status",
+          tableActions: "Actions",
+          overdue: "Overdue",
+          upToDate: "On schedule",
+          assetNotFound: "Asset not found",
+          empty: "No PM plans registered.",
+          edit: "Edit",
+          remove: "Delete"
+        }
+      : {
+          title: "Planes PM",
+          subtitle: "Sistema CMMS para gestión de mantenimiento industrial.",
+          createPlan: "Crear plan PM",
+          asset: "Activo",
+          selectAsset: "Seleccionar activo",
+          planName: "Nombre del plan",
+          frequency: "Frecuencia (días)",
+          nextRun: "Próxima ejecución",
+          save: "Guardar",
+          create: "Crear",
+          cancel: "Cancelar",
+          tablePlan: "Plan",
+          tableAsset: "Activo",
+          tableFrequency: "Frecuencia",
+          tableLastRun: "Última ejecución",
+          tableNextRun: "Próxima ejecución",
+          tableStatus: "Estado",
+          tableActions: "Acciones",
+          overdue: "Vencido",
+          upToDate: "Al día",
+          assetNotFound: "Activo no encontrado",
+          empty: "No hay planes PM registrados.",
+          edit: "Editar",
+          remove: "Eliminar"
+        };
 
   useEffect(() => {
-    const loadedAssets = loadAssets();
-    setAssets(loadedAssets);
+    const load = async () => {
+      await ensureSeedData();
+      const assetRows = await fetchAssets();
+      const nextAssets = assetRows.map((asset) => ({
+        id: asset.id,
+        tag: `AS-${asset.id.slice(0, 4).toUpperCase()}`,
+        name: asset.name ?? ""
+      }));
+      setAssets(nextAssets);
 
-    const storedPlans = loadPlans();
-    const existingWorkOrders = loadWorkOrders();
+      await ensurePMSeed(nextAssets);
+      let nextPlans = await fetchPlans();
+      await autoGenerateWorkOrders(nextPlans, nextAssets);
+      nextPlans = await fetchPlans();
+      setPlans(sortPlans(nextPlans));
+    };
 
-    const today = startOfDay(new Date());
-    const todayIso = toDateOnlyISO(today);
-    const nowIso = new Date().toISOString();
-
-    const nextWorkOrders: StoredWorkOrder[] = [...existingWorkOrders];
-    const nextPlans = storedPlans.map((plan, index) => {
-      const planNextRun = parseDateOnly(plan.nextRun);
-
-      if (!planNextRun || planNextRun > today) {
-        return plan;
-      }
-
-      const asset = loadedAssets.find((item) => item.id === plan.assetId);
-      const dueDate = addDays(today, 1).toISOString();
-
-      nextWorkOrders.unshift({
-        id: `${Date.now()}-${index}`,
-        number: `OT-${Date.now()}-${index}`,
-        assetId: plan.assetId,
-        assetTag: asset?.tag ?? "",
-        assetName: asset?.name ?? "",
-        type: "PREVENTIVE",
-        priority: "MEDIUM",
-        status: "OPEN",
-        description: `PM: ${plan.name}`,
-        technicianName: "",
-        createdAt: nowIso,
-        dueDate,
-        closedAt: null
-      });
-
-      return {
-        ...plan,
-        lastRun: todayIso,
-        nextRun: toDateOnlyISO(addDays(today, plan.frequency))
-      };
-    });
-
-    localStorage.setItem(WORK_ORDERS_STORAGE_KEY, JSON.stringify(nextWorkOrders));
-    localStorage.setItem(PM_STORAGE_KEY, JSON.stringify(nextPlans));
-
-    setPlans(sortPlans(nextPlans));
-    setLoaded(true);
+    void load();
   }, []);
-
-  useEffect(() => {
-    if (!loaded) return;
-    localStorage.setItem(PM_STORAGE_KEY, JSON.stringify(plans));
-  }, [loaded, plans]);
 
   const assetsById = useMemo(() => {
     return new Map(assets.map((asset) => [asset.id, asset]));
@@ -128,7 +219,7 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
     setEditingId(null);
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
     const trimmedName = name.trim();
@@ -138,38 +229,21 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
     if (!assetId || !trimmedName || !parsedNextRun) return;
     if (!Number.isFinite(parsedFrequency) || parsedFrequency <= 0) return;
 
-    const normalizedNextRun = toDateOnlyISO(parsedNextRun);
-
-    if (editingId) {
-      setPlans((current) =>
-        sortPlans(
-          current.map((plan) =>
-            plan.id === editingId
-              ? {
-                  ...plan,
-                  assetId,
-                  name: trimmedName,
-                  frequency: parsedFrequency,
-                  nextRun: normalizedNextRun
-                }
-              : plan
-          )
-        )
-      );
-      resetForm();
-      return;
-    }
-
-    const newPlan: PMPlan = {
-      id: `${Date.now()}`,
-      assetId,
+    const payload = {
+      asset_id: assetId,
       name: trimmedName,
       frequency: parsedFrequency,
-      lastRun: null,
-      nextRun: normalizedNextRun
+      next_run: toDateOnlyISO(parsedNextRun)
     };
 
-    setPlans((current) => sortPlans([...current, newPlan]));
+    if (editingId) {
+      await supabase.from("pm_plans").update(payload).eq("id", editingId);
+    } else {
+      await supabase.from("pm_plans").insert([{ ...payload, last_run: null }]);
+    }
+
+    const nextPlans = await fetchPlans();
+    setPlans(sortPlans(nextPlans));
     resetForm();
   };
 
@@ -181,8 +255,10 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
     setNextRunDate(toDateInputValue(plan.nextRun));
   };
 
-  const handleDelete = (planId: string) => {
+  const handleDelete = async (planId: string) => {
+    await supabase.from("pm_plans").delete().eq("id", planId);
     setPlans((current) => current.filter((plan) => plan.id !== planId));
+
     if (editingId === planId) {
       resetForm();
     }
@@ -192,28 +268,28 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
 
   return (
     <div className="space-y-6">
-      <Panel className="industrial-grid overflow-hidden p-8">
+      <Panel className="industrial-grid overflow-hidden p-8 border-[#d6d0b8]">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl space-y-3">
             <p className="text-xs uppercase tracking-[0.28em] text-accent">Preventive Maintenance</p>
-            <h1 className="text-3xl font-semibold tracking-tight">PM Plans</h1>
-            <p className="text-sm text-muted">Modo demo persistente (localStorage).</p>
+            <h1 className="text-3xl font-semibold tracking-tight">{copy.title}</h1>
+            <p className="text-sm text-muted">{copy.subtitle}</p>
           </div>
 
-          <Button onClick={resetForm}>Crear plan PM</Button>
+          <Button onClick={resetForm}>{copy.createPlan}</Button>
         </div>
       </Panel>
 
-      <Panel className="p-6">
-        <form className="grid gap-4 md:grid-cols-[1fr_1fr_140px_170px_auto] md:items-end" onSubmit={handleSubmit}>
+      <Panel className="p-6 border-[#d6d0b8] bg-[#f8f6ea]">
+        <form className="grid gap-4 md:grid-cols-[1fr_1fr_160px_180px_auto] md:items-end" onSubmit={handleSubmit}>
           <label className="space-y-2 text-sm">
-            <span className="text-muted">Activo</span>
+            <span className="text-muted">{copy.asset}</span>
             <select
               className="w-full rounded-2xl border border-border bg-panelAlt px-3 py-2.5 text-sm outline-none focus:border-accent"
               value={assetId}
               onChange={(event) => setAssetId(event.target.value)}
             >
-              <option value="">Seleccionar activo</option>
+              <option value="">{copy.selectAsset}</option>
               {assets.map((asset) => (
                 <option key={asset.id} value={asset.id}>
                   {asset.tag} - {asset.name}
@@ -223,17 +299,17 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
           </label>
 
           <label className="space-y-2 text-sm">
-            <span className="text-muted">Nombre del plan</span>
+            <span className="text-muted">{copy.planName}</span>
             <input
               className="w-full rounded-2xl border border-border bg-panelAlt px-3 py-2.5 text-sm outline-none focus:border-accent"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              placeholder="Cambio de filtros"
+              placeholder={copy.planName}
             />
           </label>
 
           <label className="space-y-2 text-sm">
-            <span className="text-muted">Frecuencia (días)</span>
+            <span className="text-muted">{copy.frequency}</span>
             <input
               className="w-full rounded-2xl border border-border bg-panelAlt px-3 py-2.5 text-sm outline-none focus:border-accent"
               type="number"
@@ -245,7 +321,7 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
           </label>
 
           <label className="space-y-2 text-sm">
-            <span className="text-muted">Próxima ejecución</span>
+            <span className="text-muted">{copy.nextRun}</span>
             <input
               className="w-full rounded-2xl border border-border bg-panelAlt px-3 py-2.5 text-sm outline-none focus:border-accent"
               type="date"
@@ -255,28 +331,28 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
           </label>
 
           <div className="flex gap-2">
-            <Button type="submit">{editingId ? "Guardar" : "Crear"}</Button>
+            <Button type="submit">{editingId ? copy.save : copy.create}</Button>
             {editingId ? (
               <Button type="button" variant="secondary" onClick={resetForm}>
-                Cancelar
+                {copy.cancel}
               </Button>
             ) : null}
           </div>
         </form>
       </Panel>
 
-      <Panel>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-border text-sm">
-            <thead className="bg-panelAlt/70 text-xs uppercase text-muted">
+      <Panel className="border-[#d6d0b8] bg-[#f8f6ea]">
+        <div className="w-full overflow-x-auto">
+          <table className="table-auto w-full border-collapse divide-y divide-border text-sm">
+            <thead className="bg-[#f5f5dc] text-xs uppercase text-muted">
               <tr>
-                <th className="px-5 py-4">Plan</th>
-                <th className="px-5 py-4">Activo</th>
-                <th className="px-5 py-4">Frecuencia</th>
-                <th className="px-5 py-4">Última ejecución</th>
-                <th className="px-5 py-4">Próxima ejecución</th>
-                <th className="px-5 py-4">Estado</th>
-                <th className="px-5 py-4 text-right">Acciones</th>
+                <th className="px-4 py-2 text-left align-middle">{copy.tablePlan}</th>
+                <th className="px-4 py-2 text-left align-middle">{copy.tableAsset}</th>
+                <th className="px-4 py-2 text-left align-middle">{copy.tableFrequency}</th>
+                <th className="px-4 py-2 text-left align-middle">{copy.tableLastRun}</th>
+                <th className="px-4 py-2 text-left align-middle">{copy.tableNextRun}</th>
+                <th className="px-4 py-2 text-left align-middle">{copy.tableStatus}</th>
+                <th className="px-4 py-2 text-right align-middle">{copy.tableActions}</th>
               </tr>
             </thead>
 
@@ -288,19 +364,23 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
 
                 return (
                   <tr key={plan.id}>
-                    <td className="px-5 py-4">{plan.name}</td>
-                    <td className="px-5 py-4">{asset ? `${asset.tag} - ${asset.name}` : "Activo no encontrado"}</td>
-                    <td className="px-5 py-4">{plan.frequency} días</td>
-                    <td className="px-5 py-4">{formatDate(plan.lastRun)}</td>
-                    <td className={`px-5 py-4 ${overdue ? "text-danger" : ""}`}>{formatDate(plan.nextRun)}</td>
-                    <td className="px-5 py-4">
-                      {overdue ? <span className="rounded-full bg-danger/20 px-3 py-1 text-xs text-danger">Vencido</span> : "Al día"}
+                    <td className="px-4 py-2 text-left align-middle">{plan.name}</td>
+                    <td className="px-4 py-2 text-left align-middle">
+                      {asset ? `${asset.tag} - ${asset.name}` : copy.assetNotFound}
                     </td>
-                    <td className="px-5 py-4">
+                    <td className="px-4 py-2 text-left align-middle">{plan.frequency}</td>
+                    <td className="px-4 py-2 text-left align-middle">{formatDate(plan.lastRun, locale)}</td>
+                    <td className={`px-4 py-2 text-left align-middle ${overdue ? "text-danger" : ""}`}>
+                      {formatDate(plan.nextRun, locale)}
+                    </td>
+                    <td className="px-4 py-2 text-left align-middle">
+                      {overdue ? <span className="rounded-full bg-danger/20 px-3 py-1 text-xs text-danger">{copy.overdue}</span> : copy.upToDate}
+                    </td>
+                    <td className="px-4 py-2 text-right align-middle">
                       <div className="flex justify-end gap-2">
-                        <Button onClick={() => handleEdit(plan)}>Editar</Button>
+                        <Button onClick={() => handleEdit(plan)}>{copy.edit}</Button>
                         <Button variant="danger" onClick={() => handleDelete(plan.id)}>
-                          Eliminar
+                          {copy.remove}
                         </Button>
                       </div>
                     </td>
@@ -311,7 +391,7 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
               {plans.length === 0 && (
                 <tr>
                   <td colSpan={7} className="py-6 text-center text-muted">
-                    No hay planes PM registrados.
+                    {copy.empty}
                   </td>
                 </tr>
               )}
@@ -321,78 +401,6 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
       </Panel>
     </div>
   );
-}
-
-function loadPlans(): PMPlan[] {
-  const raw = localStorage.getItem(PM_STORAGE_KEY);
-  if (!raw) return [];
-
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-
-    return parsed.filter(isPMPlan).map((plan) => ({ ...plan }));
-  } catch {
-    return [];
-  }
-}
-
-function loadAssets(): AssetOption[] {
-  const raw = localStorage.getItem(ASSETS_STORAGE_KEY);
-  if (!raw) return [];
-
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-
-    return parsed
-      .filter((item): item is AssetOption => {
-        if (!item || typeof item !== "object") return false;
-        const candidate = item as Record<string, unknown>;
-        return (
-          typeof candidate.id === "string" &&
-          typeof candidate.tag === "string" &&
-          typeof candidate.name === "string"
-        );
-      })
-      .map((item) => ({ id: item.id, tag: item.tag, name: item.name }));
-  } catch {
-    return [];
-  }
-}
-
-function loadWorkOrders(): StoredWorkOrder[] {
-  const raw = localStorage.getItem(WORK_ORDERS_STORAGE_KEY);
-  if (!raw) return [];
-
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(isStoredWorkOrder);
-  } catch {
-    return [];
-  }
-}
-
-function isPMPlan(value: unknown): value is PMPlan {
-  if (!value || typeof value !== "object") return false;
-
-  const candidate = value as Record<string, unknown>;
-  return (
-    typeof candidate.id === "string" &&
-    typeof candidate.assetId === "string" &&
-    typeof candidate.name === "string" &&
-    typeof candidate.frequency === "number" &&
-    (typeof candidate.lastRun === "string" || candidate.lastRun === null) &&
-    typeof candidate.nextRun === "string"
-  );
-}
-
-function isStoredWorkOrder(value: unknown): value is StoredWorkOrder {
-  if (!value || typeof value !== "object") return false;
-
-  const candidate = value as Record<string, unknown>;
-  return typeof candidate.id === "string";
 }
 
 function sortPlans(items: PMPlan[]) {
@@ -432,10 +440,12 @@ function toDateInputValue(value: string) {
   return toDateOnlyISO(parsed);
 }
 
-function formatDate(value: string | null) {
+function formatDate(value: string | null, locale: "es" | "en") {
   const parsed = parseDateOnly(value);
   if (!parsed) return "-";
-  return new Intl.DateTimeFormat("es-MX", {
+
+  const formatLocale = locale === "en" ? "en-US" : "es-MX";
+  return new Intl.DateTimeFormat(formatLocale, {
     year: "numeric",
     month: "short",
     day: "2-digit"

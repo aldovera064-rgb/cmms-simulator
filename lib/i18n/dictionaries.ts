@@ -1,4 +1,4 @@
-import { Dictionary, Locale } from "@/types/i18n";
+﻿import { Dictionary, Locale } from "@/types/i18n";
 
 export const dictionaries: Record<Locale, Dictionary> = {
   es: {
@@ -6,42 +6,61 @@ export const dictionaries: Record<Locale, Dictionary> = {
     navigation: {
       dashboard: "Dashboard KPIs",
       assets: "Activos",
-      workOrders: "Ordenes de Trabajo",
+      workOrders: "Órdenes de Trabajo",
       pmPlans: "Plan de Mantenimiento",
       spareParts: "Refacciones",
-      technicians: "Tecnicos"
+      technicians: "Técnicos"
     },
     auth: {
       title: "Ingreso al simulador",
-      subtitle: "Accede con credenciales demo para revisar la base CMMS local.",
-      email: "Correo",
-      password: "Contrasena",
-      submit: "Entrar",
-      helper: "Demo: admin@cmms.local / admin123",
-      invalid: "Credenciales invalidas para el simulador."
+      subtitle: "Sistema CMMS para gestión de mantenimiento industrial",
+      username: "Nombre de usuario",
+      password: "Contraseña",
+      login: "Iniciar sesión",
+      createAccount: "Crear cuenta",
+      loginMode: "Iniciar sesión",
+      signupMode: "Crear cuenta",
+      country: "País",
+      selectCountry: "Seleccionar",
+      passwordMin: "Mínimo 5 caracteres",
+      helper: "Usa tu usuario y contraseña de administrador.",
+      invalid: "Credenciales inválidas para el simulador."
     },
     shell: {
-      welcome: "Base tecnica del simulador CMMS",
-      simulator: "Entorno local sin dependencias externas",
+      welcome: "Sistema CMMS para gestión de mantenimiento industrial",
+      simulator: "Plataforma de mantenimiento industrial",
       moduleStatus: "Estado",
       sessionRole: "Rol",
-      signOut: "Cerrar sesion",
+      signOut: "Cerrar sesión",
       language: "Idioma",
       loading: "Cargando simulador..."
     },
     dashboard: {
-      title: "Dashboard base",
-      description: "Panel inicial para validar shell, navegacion y datos demo antes de desarrollar modulos.",
-      assets: "Activos modelados",
-      workOrders: "OTs demo",
+      title: "Dashboard industrial",
+      description: "Sistema CMMS para gestión de mantenimiento industrial",
+      assets: "Activos",
+      workOrders: "Órdenes",
       pmPlans: "Planes PM",
-      technicians: "Tecnicos",
-      foundationStatus: "Estado de la base",
-      foundationDescription: "Prisma, SQLite, datos seed, sesion simulada y shell bilingue ya estan listos. La siguiente fase puede enfocarse en CRUDs y logica de mantenimiento por modulo."
+      technicians: "Técnicos",
+      foundationStatus: "Estado operativo",
+      foundationDescription: "Sistema CMMS para gestión de mantenimiento industrial",
+      assetsChart: "Activos por área",
+      workOrdersChart: "Estado de órdenes",
+      pmChart: "PM vs Correctivo",
+      open: "Abiertas",
+      inProgress: "En proceso",
+      overdue: "Atrasadas",
+      closed: "Cerradas",
+      pmLabel: "PM",
+      correctiveLabel: "Correctivo",
+      availability: "Disponibilidad de activos",
+      mttr: "MTTR",
+      mtbf: "MTBF",
+      overdueWorkOrders: "OT atrasadas"
     },
     modules: {
-      title: "Modulo en preparacion",
-      description: "La estructura de datos y la ruta ya estan listas para continuar con la implementacion progresiva.",
+      title: "Módulo en preparación",
+      description: "Sistema CMMS para gestión de mantenimiento industrial",
       comingSoon: "Siguiente fase"
     }
   },
@@ -57,16 +76,22 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     auth: {
       title: "Simulator sign in",
-      subtitle: "Use demo credentials to access the local CMMS simulator base.",
-      email: "Email",
+      subtitle: "CMMS system for industrial maintenance management",
+      username: "Username",
       password: "Password",
-      submit: "Sign in",
-      helper: "Demo: admin@cmms.local / admin123",
+      login: "Login",
+      createAccount: "Create account",
+      loginMode: "Sign in",
+      signupMode: "Create account",
+      country: "Country",
+      selectCountry: "Select",
+      passwordMin: "Minimum 5 characters",
+      helper: "Use your admin username and password.",
       invalid: "Invalid simulator credentials."
     },
     shell: {
-      welcome: "CMMS simulator technical foundation",
-      simulator: "Local environment with no external dependencies",
+      welcome: "CMMS system for industrial maintenance management",
+      simulator: "Industrial maintenance platform",
       moduleStatus: "Status",
       sessionRole: "Role",
       signOut: "Sign out",
@@ -74,18 +99,31 @@ export const dictionaries: Record<Locale, Dictionary> = {
       loading: "Loading simulator..."
     },
     dashboard: {
-      title: "Base dashboard",
-      description: "Initial panel to validate shell, navigation, and seeded data before building full modules.",
-      assets: "Modeled assets",
-      workOrders: "Demo work orders",
-      pmPlans: "PM plans",
+      title: "Industrial dashboard",
+      description: "CMMS system for industrial maintenance management",
+      assets: "Assets",
+      workOrders: "Work Orders",
+      pmPlans: "PM Plans",
       technicians: "Technicians",
-      foundationStatus: "Foundation status",
-      foundationDescription: "Prisma, SQLite, seed data, simulated session and bilingual shell are ready. The next phase can focus on CRUD flows and maintenance logic module by module."
+      foundationStatus: "Operational status",
+      foundationDescription: "CMMS system for industrial maintenance management",
+      assetsChart: "Assets by area",
+      workOrdersChart: "Work order status",
+      pmChart: "PM vs Corrective",
+      open: "Open",
+      inProgress: "In progress",
+      overdue: "Overdue",
+      closed: "Closed",
+      pmLabel: "PM",
+      correctiveLabel: "Corrective",
+      availability: "Asset availability",
+      mttr: "MTTR",
+      mtbf: "MTBF",
+      overdueWorkOrders: "Overdue work orders"
     },
     modules: {
       title: "Module in preparation",
-      description: "The route and data structure are ready for the next implementation phase.",
+      description: "CMMS system for industrial maintenance management",
       comingSoon: "Next phase"
     }
   }

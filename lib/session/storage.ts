@@ -1,15 +1,22 @@
-"use client";
+﻿"use client";
 
 import { SessionUser } from "@/types/session";
 
 const STORAGE_KEY = "cmms-session";
 
+function readCookie(name: string) {
+  if (typeof document === "undefined") return "";
+  const entry = document.cookie.split("; ").find((item) => item.startsWith(`${name}=`));
+  if (!entry) return "";
+  return decodeURIComponent(entry.slice(name.length + 1));
+}
+
 export function getStoredSession(): SessionUser | null {
-  if (typeof window === "undefined") {
+  if (typeof document === "undefined") {
     return null;
   }
 
-  const raw = window.localStorage.getItem(STORAGE_KEY);
+  const raw = readCookie(STORAGE_KEY);
   if (!raw) {
     return null;
   }
@@ -22,9 +29,10 @@ export function getStoredSession(): SessionUser | null {
 }
 
 export function setStoredSession(session: SessionUser) {
-  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+  const value = encodeURIComponent(JSON.stringify(session));
+  document.cookie = `${STORAGE_KEY}=${value}; Path=/; Max-Age=2592000; SameSite=Lax`;
 }
 
 export function clearStoredSession() {
-  window.localStorage.removeItem(STORAGE_KEY);
+  document.cookie = `${STORAGE_KEY}=; Path=/; Max-Age=0; SameSite=Lax`;
 }

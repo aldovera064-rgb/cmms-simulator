@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import type { ReactNode } from "react";
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useContext, useMemo, useState } from "react";
 
 import { dictionaries } from "@/lib/i18n/dictionaries";
 import { Dictionary, Locale } from "@/types/i18n";
@@ -12,23 +12,29 @@ type I18nContextValue = {
   setLocale: (locale: Locale) => void;
 };
 
-const STORAGE_KEY = "cmms-locale";
+const COOKIE_KEY = "cmms-locale";
 
 const I18nContext = createContext<I18nContextValue | null>(null);
 
-export function I18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>("es");
+function readLocaleCookie(): Locale | null {
+  if (typeof document === "undefined") return null;
+  const entry = document.cookie.split("; ").find((item) => item.startsWith(`${COOKIE_KEY}=`));
+  if (!entry) return null;
+  const value = decodeURIComponent(entry.slice(COOKIE_KEY.length + 1));
+  return value === "es" || value === "en" ? value : null;
+}
 
-  useEffect(() => {
-    const storedLocale = window.localStorage.getItem(STORAGE_KEY);
-    if (storedLocale === "es" || storedLocale === "en") {
-      setLocaleState(storedLocale);
-    }
-  }, []);
+function writeLocaleCookie(locale: Locale) {
+  if (typeof document === "undefined") return;
+  document.cookie = `${COOKIE_KEY}=${locale}; Path=/; Max-Age=31536000; SameSite=Lax`;
+}
+
+export function I18nProvider({ children }: { children: ReactNode }) {
+  const [locale, setLocaleState] = useState<Locale>(() => readLocaleCookie() ?? "es");
 
   const setLocale = (value: Locale) => {
     setLocaleState(value);
-    window.localStorage.setItem(STORAGE_KEY, value);
+    writeLocaleCookie(value);
   };
 
   const value = useMemo(

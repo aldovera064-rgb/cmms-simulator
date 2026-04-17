@@ -1,28 +1,50 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { AssetFormModal } from "@/components/assets/asset-form-modal";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CriticalityBadge } from "@/components/ui/criticality-badge";
 import { Panel } from "@/components/ui/panel";
+import { ensureSeedData, fetchAssets } from "@/lib/cmms-data";
+import { useI18n } from "@/lib/i18n/context";
+import { supabase } from "@/lib/supabase";
 import { AssetFormValues, AssetListItem } from "@/types/assets";
 
 type AssetsPageClientProps = {
   initialAssets: AssetListItem[];
 };
 
+function mapAsset(row: {
+  id: string;
+  name: string | null;
+  area: string | null;
+  status: string | null;
+  start_time: number | null;
+  created_at: string | null;
+}): AssetListItem {
+  return {
+    id: row.id,
+    tag: `AS-${row.id.slice(0, 4).toUpperCase()}`,
+    name: row.name ?? "",
+    area: row.area ?? "",
+    criticality: "B",
+    status: row.status === "OUT_OF_SERVICE" ? "OUT_OF_SERVICE" : row.status === "MAINTENANCE" ? "MAINTENANCE" : "OPERATIVE",
+    manufacturer: "",
+    model: "",
+    serialNumber: "",
+    installationDate: row.created_at ?? new Date().toISOString(),
+    startTime: row.start_time ?? Date.now(),
+    lastFailureAt: null,
+    technicalSpecifications: ""
+  };
+}
+
 export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
-  // ✅ PASO 5.2 — cargar desde localStorage
-  const [assets, setAssets] = useState<AssetListItem[]>(() => {
-    if (typeof window === "undefined") return initialAssets;
-
-    const stored = localStorage.getItem("demo-assets");
-    return stored ? JSON.parse(stored) : initialAssets;
-  });
-
+  const { locale } = useI18n();
+  const [assets, setAssets] = useState<AssetListItem[]>(initialAssets);
   const [editingAsset, setEditingAsset] = useState<AssetListItem | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<AssetListItem | null>(null);
@@ -30,11 +52,69 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
   const [deleteError, setDeleteError] = useState("");
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [now, setNow] = useState(Date.now());
 
-  // ✅ PASO 5.1 — guardar en localStorage
+  const copy =
+    locale === "en"
+      ? {
+          registry: "Asset Registry",
+          title: "Assets",
+          subtitle: "CMMS system for industrial maintenance management.",
+          newAsset: "New Asset",
+          tag: "TAG",
+          name: "Name",
+          area: "Area",
+          runtime: "Runtime",
+          criticality: "Criticality",
+          actions: "Actions",
+          edit: "Edit",
+          remove: "Delete",
+          empty: "No assets",
+          deleteTitle: "Confirm deletion",
+          deleteAction: "Delete"
+        }
+      : {
+          registry: "Registro de Activos",
+          title: "Activos",
+          subtitle: "Sistema CMMS para gestión de mantenimiento industrial.",
+          newAsset: "Nuevo Activo",
+          tag: "TAG",
+          name: "Nombre",
+          area: "Área",
+          runtime: "Runtime",
+          criticality: "Criticidad",
+          actions: "Acciones",
+          edit: "Editar",
+          remove: "Eliminar",
+          empty: "No hay activos.",
+          deleteTitle: "Confirmar eliminación",
+          deleteAction: "Eliminar"
+        };
+
   useEffect(() => {
-    localStorage.setItem("demo-assets", JSON.stringify(assets));
-  }, [assets]);
+    const load = async () => {
+      await ensureSeedData();
+      const rows = await fetchAssets();
+      setAssets(rows.map(mapAsset));
+    };
+
+    void load();
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 60000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const assetsWithRuntime = useMemo(
+    () =>
+      assets.map((asset) => {
+        const start = asset.startTime ?? Date.now();
+        const hours = (now - start) / 3600000;
+        return { ...asset, runtimeHours: hours };
+      }),
+    [assets, now]
+  );
 
   const openCreateModal = () => {
     setEditingAsset(null);
@@ -63,40 +143,37 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
     try {
       const isEditing = Boolean(editingAsset);
 
-      const newAsset: AssetListItem = {
-  id: isEditing ? editingAsset!.id : Date.now().toString(),
-  tag: values.tag,
-  name: values.name || "",
-  area: values.area || "",
-  criticality: values.criticality || "B",
-  status: "OPERATIVE",
+      if (isEditing) {
+        const { error } = await supabase
+          .from("assets")
+          .update({
+            name: values.name || values.tag,
+            area: values.area || "Producción",
+            status: "OPERATIVE",
+            start_time: editingAsset?.startTime ?? Date.now()
+          })
+          .eq("id", editingAsset!.id);
 
-  // 🔥 ESTO ES LO QUE TE FALTA
-  manufacturer: values.manufacturer || "",
-  model: values.model || "",
-  serialNumber: values.serialNumber || "",
-  technicalSpecifications: values.technicalSpecifications || "",
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("assets").insert([
+          {
+            name: values.name || values.tag,
+            area: values.area || "Producción",
+            status: "OPERATIVE",
+            start_time: Date.now()
+          }
+        ]);
 
-  installationDate: new Date().toISOString(),
-  lastFailureAt: null
-};
+        if (error) throw error;
+      }
 
-      setAssets((current) => {
-        if (isEditing) {
-          return sortAssets(
-            current.map((item) =>
-              item.id === newAsset.id ? newAsset : item
-            )
-          );
-        }
-
-        return sortAssets([...current, newAsset]);
-      });
-
+      const rows = await fetchAssets();
+      setAssets(rows.map(mapAsset));
       setFormOpen(false);
       setEditingAsset(null);
     } catch {
-      setFormError("No se pudo guardar el activo.");
+      setFormError(locale === "en" ? "Could not save asset." : "No se pudo guardar el activo.");
     } finally {
       setSaving(false);
     }
@@ -109,13 +186,13 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
     setDeleteError("");
 
     try {
-      setAssets((current) =>
-        current.filter((item) => item.id !== deleteTarget.id)
-      );
+      const { error } = await supabase.from("assets").delete().eq("id", deleteTarget.id);
+      if (error) throw error;
 
+      setAssets((current) => current.filter((item) => item.id !== deleteTarget.id));
       setDeleteTarget(null);
     } catch {
-      setDeleteError("No se pudo eliminar el activo.");
+      setDeleteError(locale === "en" ? "Could not delete asset." : "No se pudo eliminar el activo.");
     } finally {
       setDeleting(false);
     }
@@ -123,70 +200,59 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
 
   return (
     <div className="space-y-6">
-      <Panel className="industrial-grid overflow-hidden p-8">
+      <Panel className="industrial-grid overflow-hidden p-8 border-[#d6d0b8]">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl space-y-3">
-            <p className="text-xs uppercase tracking-[0.28em] text-accent">
-              Asset Registry
-            </p>
-            <h1 className="text-3xl font-semibold tracking-tight">
-              Activos
-            </h1>
-            <p className="text-sm text-muted">
-              Modo demo persistente (localStorage).
-            </p>
+            <p className="text-xs uppercase tracking-[0.28em] text-accent">{copy.registry}</p>
+            <h1 className="text-3xl font-semibold tracking-tight">{copy.title}</h1>
+            <p className="text-sm text-muted">{copy.subtitle}</p>
           </div>
 
-          <Button onClick={openCreateModal}>
-            Nuevo Activo
-          </Button>
+          <Button onClick={openCreateModal}>{copy.newAsset}</Button>
         </div>
       </Panel>
 
-      <Panel>
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-border text-sm">
-            <thead className="bg-panelAlt/70 text-xs uppercase text-muted">
+      <Panel className="border-[#d6d0b8] bg-[#f8f6ea]">
+        <div className="w-full overflow-x-auto">
+          <table className="table-auto w-full border-collapse divide-y divide-border text-sm">
+            <thead className="bg-[#f5f5dc] text-xs uppercase text-muted">
               <tr>
-                <th className="px-5 py-4">TAG</th>
-                <th className="px-5 py-4">Nombre</th>
-                <th className="px-5 py-4">Área</th>
-                <th className="px-5 py-4">Criticidad</th>
-                <th className="px-5 py-4 text-right">Acciones</th>
+                <th className="px-4 py-2 text-left align-middle">{copy.tag}</th>
+                <th className="px-4 py-2 text-left align-middle">{copy.name}</th>
+                <th className="px-4 py-2 text-left align-middle">{copy.area}</th>
+                <th className="px-4 py-2 text-left align-middle">{copy.runtime}</th>
+                <th className="px-4 py-2 text-left align-middle">{copy.criticality}</th>
+                <th className="px-4 py-2 text-right align-middle">{copy.actions}</th>
               </tr>
             </thead>
 
             <tbody className="divide-y divide-border">
-              {assets.map((asset) => (
+              {assetsWithRuntime.map((asset) => (
                 <tr key={asset.id}>
-                  <td className="px-5 py-4">
-                    <Link href={`/activos/${asset.id}`}>
-                      {asset.tag}
-                    </Link>
+                  <td className="px-4 py-2 text-left align-middle">
+                    <Link href={`/activos/${asset.id}`}>{asset.tag}</Link>
                   </td>
-                  <td className="px-5 py-4">{asset.name}</td>
-                  <td className="px-5 py-4">{asset.area}</td>
-                  <td className="px-5 py-4">
+                  <td className="px-4 py-2 text-left align-middle">{asset.name}</td>
+                  <td className="px-4 py-2 text-left align-middle">{asset.area}</td>
+                  <td className="px-4 py-2 text-left align-middle">{asset.runtimeHours.toFixed(1)} h</td>
+                  <td className="px-4 py-2 text-left align-middle">
                     <CriticalityBadge value={asset.criticality} />
                   </td>
-                  <td className="px-5 py-4 text-right flex gap-2 justify-end">
-                    <Button onClick={() => openEditModal(asset)}>
-                      Editar
-                    </Button>
-                    <Button
-                      variant="danger"
-                      onClick={() => setDeleteTarget(asset)}
-                    >
-                      Eliminar
-                    </Button>
+                  <td className="px-4 py-2 text-right align-middle">
+                    <div className="flex justify-end gap-2">
+                      <Button onClick={() => openEditModal(asset)}>{copy.edit}</Button>
+                      <Button variant="danger" onClick={() => setDeleteTarget(asset)}>
+                        {copy.remove}
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}
 
-              {assets.length === 0 && (
+              {assetsWithRuntime.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="text-center py-6">
-                    No hay activos.
+                  <td colSpan={6} className="text-center py-6">
+                    {copy.empty}
                   </td>
                 </tr>
               )}
@@ -206,23 +272,13 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
 
       <ConfirmDialog
         open={Boolean(deleteTarget)}
-        title="Confirmar eliminación"
-        description={`Eliminar ${deleteTarget?.tag ?? ""}`}
-        confirmLabel="Eliminar"
+        title={copy.deleteTitle}
+        description={deleteError || `${copy.remove} ${deleteTarget?.tag ?? ""}`}
+        confirmLabel={copy.deleteAction}
         loading={deleting}
         onConfirm={confirmDelete}
         onCancel={() => setDeleteTarget(null)}
       />
     </div>
   );
-}
-
-function sortAssets(items: AssetListItem[]) {
-  const priority = { A: 0, B: 1, C: 2 } as const;
-
-  return [...items].sort((a, b) => {
-    const diff = priority[a.criticality] - priority[b.criticality];
-    if (diff !== 0) return diff;
-    return a.tag.localeCompare(b.tag);
-  });
 }

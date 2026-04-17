@@ -9,6 +9,7 @@ export type AssetListItem = {
   model: string;
   serialNumber: string;
   installationDate: string;
+  startTime?: number;
   lastFailureAt: string | null;
   technicalSpecifications: string;
 };

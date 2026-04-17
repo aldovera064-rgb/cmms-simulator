@@ -1,56 +1,64 @@
-@tailwind base;
+﻿@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --font-sans: "Bahnschrift";
-  --color-background: #09131c;
-  --color-panel: #101e2b;
-  --color-panel-alt: #162636;
-  --color-border: #274053;
-  --color-foreground: #ecf3f9;
-  --color-muted: #98afc2;
-  --color-accent: #f59e0b;
-  --color-accent-soft: rgba(245, 158, 11, 0.12);
-  --color-success: #34d399;
-  --color-warning: #fbbf24;
-  --color-danger: #f87171;
+  --font-sans: "Inter", "Segoe UI", sans-serif;
+  --color-background: #f5f5dc;
+  --color-panel: #f5f2e7;
+  --color-panel-alt: #fcfaf2;
+  --color-border: #d6d0b8;
+  --color-foreground: #1a1a1a;
+  --color-muted: #5f5a4d;
+  --color-accent: #556b2f;
+  --color-accent-soft: #dfe8cb;
+  --color-success: #6b8e23;
+  --color-warning: #c2a14d;
+  --color-danger: #9f3a2f;
 }
 
-* {
-  border-color: var(--color-border);
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans);
+  }
+
+  a {
+    @apply text-inherit no-underline;
+  }
 }
 
-html {
-  background:
-    radial-gradient(circle at top, rgba(245, 158, 11, 0.12), transparent 28%),
-    linear-gradient(180deg, #08121b 0%, #0d1722 100%);
-}
+@layer components {
+  .bg-main {
+    background-color: var(--color-background);
+  }
 
-body {
-  min-height: 100vh;
-  color: var(--color-foreground);
-  background:
-    radial-gradient(circle at top right, rgba(56, 189, 248, 0.08), transparent 26%),
-    linear-gradient(180deg, rgba(9, 19, 28, 0.96), rgba(9, 19, 28, 1)),
-    var(--color-background);
-  background-size: cover;
-}
+  .bg-panel {
+    background-color: var(--color-panel);
+  }
 
-a {
-  color: inherit;
-  text-decoration: none;
-}
+  .text-primary {
+    color: var(--color-accent);
+  }
 
-button,
-input,
-select,
-textarea {
-  outline: none;
-}
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-2xl px-4 py-2.5 text-sm font-semibold text-white shadow-panel transition hover:brightness-110;
+    background-color: var(--color-accent);
+  }
 
-.industrial-grid {
-  background-image: linear-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(148, 163, 184, 0.08) 1px, transparent 1px);
-  background-size: 28px 28px;
+  .btn-secondary {
+    @apply inline-flex items-center justify-center rounded-2xl border border-border bg-panel px-4 py-2.5 text-sm font-semibold text-foreground transition hover:bg-panelAlt;
+  }
+
+  .industrial-grid {
+    background-image:
+      linear-gradient(to right, rgba(85, 107, 47, 0.08) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(85, 107, 47, 0.08) 1px, transparent 1px),
+      radial-gradient(circle at top right, rgba(194, 161, 77, 0.22), transparent 40%);
+    background-size: 28px 28px, 28px 28px, 100% 100%;
+  }
 }
