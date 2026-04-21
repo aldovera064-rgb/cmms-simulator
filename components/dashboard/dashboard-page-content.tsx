@@ -238,10 +238,6 @@ export function DashboardPageContent({ metrics }: DashboardPageContentProps) {
         </Panel>
       </div>
 
-      <Panel className="p-6 border-[#d6d0b8] bg-[#f8f6ea]">
-        <p className="text-xs uppercase tracking-[0.24em] text-accent">{dictionary.dashboard.foundationStatus}</p>
-        <p className="mt-3 max-w-3xl text-sm leading-7 text-muted">{dictionary.dashboard.foundationDescription}</p>
-      </Panel>
     </div>
   );
 }

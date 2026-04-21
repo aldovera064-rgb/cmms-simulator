@@ -76,7 +76,7 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
       : {
           registry: "Registro de Activos",
           title: "Activos",
-          subtitle: "Sistema CMMS para gestión de mantenimiento industrial.",
+          subtitle: "Monitoreo operativo de equipos industriales.",
           newAsset: "Nuevo Activo",
           tag: "TAG",
           name: "Nombre",

@@ -8,12 +8,13 @@ import { useSession } from "@/lib/session/context";
 
 function normalizeCountry(value: string) {
   if (!value) return "mx";
-  if (value === "🇲🇽") return "mx";
-  if (value === "🇺🇸") return "us";
-  if (value === "🇨🇦") return "ca";
-  if (value === "🏳️‍🌈") return "pride";
   if (value === "mx" || value === "us" || value === "ca" || value === "pride") return value;
   return "mx";
+}
+
+function getFlagSrc(country: string) {
+  if (country === "pride") return "/flags/pride.svg";
+  return `https://flagcdn.com/w40/${country}.png`;
 }
 
 export function Topbar() {
@@ -67,7 +68,7 @@ export function Topbar() {
         </div>
 
         <div className="rounded-2xl border border-border bg-panelAlt/80 px-3 py-2 text-sm flex items-center gap-2">
-          <img src={`/flags/${cookieCountry}.svg`} className="w-4 h-4" alt={cookieCountry} />
+          <img src={getFlagSrc(cookieCountry)} className="w-5 h-5 object-cover" alt={cookieCountry} />
           <span>{cookieUser || user?.name || "Admin"}</span>
         </div>
 

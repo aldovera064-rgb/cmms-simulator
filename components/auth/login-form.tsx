@@ -20,6 +20,13 @@ type AdminRow = {
   country: string | null;
 };
 
+const COUNTRY_OPTIONS: Country[] = ["mx", "us", "ca", "pride"];
+
+function getFlagSrc(country: string) {
+  if (country === "pride") return "/flags/pride.svg";
+  return `https://flagcdn.com/w40/${country}.png`;
+}
+
 async function createAdmin(username: string, password: string, country: string) {
   if (password.length < 5) {
     alert("Password must be at least 5 characters");
@@ -217,21 +224,25 @@ export function LoginForm() {
 
         {mode === "signup" ? (
           <div className="space-y-2">
-            <label className="text-sm text-muted" htmlFor="country">
-              {dictionary.auth.country}
-            </label>
-            <select
-              id="country"
-              value={country}
-              onChange={(event) => setCountry(event.target.value)}
-              className="w-full rounded-2xl border border-border bg-panelAlt px-4 py-3 text-xl text-center"
-            >
-              <option value="">{dictionary.auth.selectCountry}</option>
-              <option value="mx">🇲🇽</option>
-              <option value="us">🇺🇸</option>
-              <option value="ca">🇨🇦</option>
-              <option value="pride">🏳️‍🌈</option>
-            </select>
+            <label className="text-sm text-muted">{dictionary.auth.country}</label>
+            <div className="grid grid-cols-4 gap-3">
+              {COUNTRY_OPTIONS.map((option) => {
+                const selected = country === option;
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => setCountry(option)}
+                    className={`h-12 w-12 flex items-center justify-center rounded-lg border transition ${
+                      selected ? "border-green-600 bg-green-50" : "border-border bg-panel hover:bg-neutral-100"
+                    }`}
+                  >
+                    <img src={getFlagSrc(option)} className="w-6 h-6 object-contain" alt={option} />
+                  </button>
+                );
+              })}
+            </div>
+            {!country ? <p className="text-xs text-muted">{dictionary.auth.selectCountry}</p> : null}
           </div>
         ) : null}
 

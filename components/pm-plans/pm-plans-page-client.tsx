@@ -161,7 +161,7 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
         }
       : {
           title: "Planes PM",
-          subtitle: "Sistema CMMS para gestión de mantenimiento industrial.",
+          subtitle: "Programación preventiva para continuidad operativa.",
           createPlan: "Crear plan PM",
           asset: "Activo",
           selectAsset: "Seleccionar activo",

@@ -60,7 +60,7 @@ export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClient
       : {
           registry: "Registro de Refacciones",
           title: "Refacciones",
-          subtitle: "Sistema CMMS para gestión de mantenimiento industrial.",
+          subtitle: "Control de inventario para mantenimiento.",
           create: "Crear refacción",
           save: "Guardar",
           cancel: "Cancelar",

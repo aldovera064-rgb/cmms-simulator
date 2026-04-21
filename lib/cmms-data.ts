@@ -72,6 +72,14 @@ async function ensureTableSeed<TInsert extends object>(table: string, seed: TIns
   await supabase.from(table).insert(seed);
 }
 
+async function safeSelectOrdered<T>(table: string, orderBy: string, ascending: boolean) {
+  const ordered = await supabase.from(table).select("*").order(orderBy, { ascending });
+  if (!ordered.error && ordered.data) return ordered.data as T[];
+
+  const fallback = await supabase.from(table).select("*");
+  return (fallback.data ?? []) as T[];
+}
+
 export async function ensureSeedData() {
   await Promise.all([
     ensureTableSeed("assets", ASSET_SEED),
@@ -82,21 +90,17 @@ export async function ensureSeedData() {
 }
 
 export async function fetchAssets() {
-  const { data } = await supabase.from("assets").select("*").order("created_at", { ascending: false });
-  return (data ?? []) as AssetRow[];
+  return await safeSelectOrdered<AssetRow>("assets", "created_at", false);
 }
 
 export async function fetchWorkOrders() {
-  const { data } = await supabase.from("work_orders").select("*").order("created_at", { ascending: false });
-  return (data ?? []) as WorkOrderRow[];
+  return await safeSelectOrdered<WorkOrderRow>("work_orders", "created_at", false);
 }
 
 export async function fetchTechnicians() {
-  const { data } = await supabase.from("technicians").select("*").order("name", { ascending: true });
-  return (data ?? []) as TechnicianRow[];
+  return await safeSelectOrdered<TechnicianRow>("technicians", "name", true);
 }
 
 export async function fetchSpareParts() {
-  const { data } = await supabase.from("spare_parts").select("*").order("name", { ascending: true });
-  return (data ?? []) as SparePartRow[];
+  return await safeSelectOrdered<SparePartRow>("spare_parts", "name", true);
 }

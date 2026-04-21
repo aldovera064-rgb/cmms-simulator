@@ -13,7 +13,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     auth: {
       title: "Ingreso al simulador",
-      subtitle: "Sistema CMMS para gestión de mantenimiento industrial",
+      subtitle: "Plataforma digital de mantenimiento industrial",
       username: "Nombre de usuario",
       password: "Contraseña",
       login: "Iniciar sesión",
@@ -27,7 +27,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       invalid: "Credenciales inválidas para el simulador."
     },
     shell: {
-      welcome: "Sistema CMMS para gestión de mantenimiento industrial",
+      welcome: "Plataforma digital de mantenimiento industrial",
       simulator: "Plataforma de mantenimiento industrial",
       moduleStatus: "Estado",
       sessionRole: "Rol",
@@ -37,13 +37,13 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     dashboard: {
       title: "Dashboard industrial",
-      description: "Sistema CMMS para gestión de mantenimiento industrial",
+      description: "Visibilidad en tiempo real del mantenimiento",
       assets: "Activos",
       workOrders: "Órdenes",
       pmPlans: "Planes PM",
       technicians: "Técnicos",
-      foundationStatus: "Estado operativo",
-      foundationDescription: "Sistema CMMS para gestión de mantenimiento industrial",
+      foundationStatus: "Operación estable",
+      foundationDescription: "Visibilidad en tiempo real del mantenimiento",
       assetsChart: "Activos por área",
       workOrdersChart: "Estado de órdenes",
       pmChart: "PM vs Correctivo",
@@ -60,7 +60,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
     },
     modules: {
       title: "Módulo en preparación",
-      description: "Sistema CMMS para gestión de mantenimiento industrial",
+      description: "Plataforma digital de mantenimiento industrial",
       comingSoon: "Siguiente fase"
     }
   },
