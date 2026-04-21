@@ -6,17 +6,21 @@ export type WorkOrderListItem = {
   id: string;
   number: string;
   assetId: string;
+  technicianId: string | null;
   assetTag: string;
   assetName: string;
   type: WorkOrderTypeValue;
   priority: WorkOrderPriorityValue;
   status: WorkOrderStatusValue;
   description: string;
+  actionTaken: string | null;
   technicianName: string;
+  qrCode: string | null;
   createdAt: string;
   dueDate: string;
   startedAt: string | null;
   closedAt: string | null;
+  completedAt: string | null;
   rootCause: string | null;
   workPerformed: string | null;
   repairTimeMinutes: number | null;
@@ -31,6 +35,7 @@ export type WorkOrderFilters = {
 
 export type WorkOrderCreateInput = {
   assetId: string;
+  technicianId?: string | null;
   type: WorkOrderTypeValue;
   priority: WorkOrderPriorityValue;
   description: string;
@@ -43,8 +48,10 @@ export type WorkOrderUpdateInput = Partial<{
   status: WorkOrderStatusValue;
   description: string;
   technicianName: string;
+  technicianId: string | null;
   startedAt: string | null;
   workPerformed: string;
+  actionTaken: string;
   rootCause: string;
   repairTimeMinutes: number;
   closedAt: string | null;

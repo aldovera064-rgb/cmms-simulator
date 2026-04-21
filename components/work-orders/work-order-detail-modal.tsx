@@ -18,6 +18,7 @@ type WorkOrderDetailModalProps = {
   error?: string;
   onClose: () => void;
   onUpdate: (values: WorkOrderUpdateInput) => Promise<void>;
+  onExportPdf: () => void;
   onDelete: () => Promise<void>;
 };
 
@@ -28,6 +29,7 @@ export function WorkOrderDetailModal({
   error,
   onClose,
   onUpdate,
+  onExportPdf,
   onDelete
 }: WorkOrderDetailModalProps) {
   const [technicianName, setTechnicianName] = useState("");
@@ -145,6 +147,10 @@ export function WorkOrderDetailModal({
           <Button disabled={loading} onClick={onDelete} variant="danger">
             Eliminar
           </Button>
+
+          <Button disabled={loading} onClick={onExportPdf} variant="secondary">
+            Export PDF
+          </Button>
         </div>
 
         {workOrder.status !== "CLOSED" ? (
@@ -190,6 +196,7 @@ export function WorkOrderDetailModal({
                     technicianName,
                     description,
                     workPerformed,
+                    actionTaken: workPerformed,
                     rootCause,
                     repairTimeMinutes: Number(repairTimeMinutes)
                   })

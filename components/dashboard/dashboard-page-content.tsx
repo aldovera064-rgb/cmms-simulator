@@ -40,6 +40,8 @@ type WorkOrderLike = {
   type: string | null;
   priority: string | null;
   created_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
 };
 
 const defaultMetrics = {
@@ -127,13 +129,24 @@ export function DashboardPageContent({ metrics }: DashboardPageContentProps) {
     const availability = totalAssets > 0 ? (operativeAssets / totalAssets) * 100 : 0;
 
     const closedOrders = workOrders.filter((order) => order.status === "CLOSED");
-    const mttrHours =
+    const timestampBasedDurations = closedOrders
+      .map((order) => {
+        if (!order.started_at || !order.completed_at) return null;
+        const duration = new Date(order.completed_at).getTime() - new Date(order.started_at).getTime();
+        return duration > 0 ? duration / 3600000 : null;
+      })
+      .filter((value): value is number => value !== null);
+    const fallbackMttr =
       closedOrders.length > 0
         ? closedOrders.reduce((acc, order) => {
             const base = order.priority === "P1" ? 6 : order.priority === "P2" ? 4 : order.priority === "P3" ? 2 : 1;
             return acc + base;
           }, 0) / closedOrders.length
         : 0;
+    const mttrHours =
+      timestampBasedDurations.length > 0
+        ? timestampBasedDurations.reduce((acc, value) => acc + value, 0) / timestampBasedDurations.length
+        : fallbackMttr;
 
     const failures = workOrders.filter((order) => order.type === "CORRECTIVE").length;
     const totalRuntimeHours = assets.reduce((acc, asset) => {

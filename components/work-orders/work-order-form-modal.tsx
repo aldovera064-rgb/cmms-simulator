@@ -33,6 +33,7 @@ type WorkOrderFormModalProps = {
 
 const initialValues: WorkOrderCreateInput = {
   assetId: "",
+  technicianId: null,
   type: "CORRECTIVE",
   priority: "P3",
   description: "",
@@ -174,14 +175,20 @@ export function WorkOrderFormModal({
         <label className="block space-y-2">
           <span className="text-sm text-muted">{copy.technician}</span>
           <Select
-            onChange={(event) =>
-              setValues((current) => ({ ...current, technicianName: event.target.value }))
-            }
-            value={values.technicianName}
+            onChange={(event) => {
+              const selectedId = event.target.value;
+              const selectedTechnician = technicians.find((technician) => technician.id === selectedId);
+              setValues((current) => ({
+                ...current,
+                technicianId: selectedId || null,
+                technicianName: selectedTechnician?.name ?? ""
+              }));
+            }}
+            value={values.technicianId ?? ""}
           >
             <option value="">{copy.selectTechnician}</option>
             {technicians.map((technician) => (
-              <option key={technician.id} value={technician.name}>
+              <option key={technician.id} value={technician.id}>
                 {technician.name}
               </option>
             ))}

@@ -6,16 +6,27 @@ export type AssetRow = {
   area: string | null;
   status: string | null;
   start_time: number | null;
+  serial_number: string | null;
+  criticality: string | null;
+  location: string | null;
   created_at: string | null;
 };
 
 export type WorkOrderRow = {
   id: string;
   title: string | null;
+  asset_id: string | null;
+  technician_id: string | null;
   priority: string | null;
   status: string | null;
   type: string | null;
   technician: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  description: string | null;
+  root_cause: string | null;
+  action_taken: string | null;
+  qr_code: string | null;
   created_at: string | null;
 };
 
@@ -23,6 +34,7 @@ export type TechnicianRow = {
   id: string;
   name: string | null;
   skill: string | null;
+  active: boolean | null;
 };
 
 export type SparePartRow = {
@@ -30,6 +42,7 @@ export type SparePartRow = {
   name: string | null;
   stock: number | null;
   location: string | null;
+  min_stock: number | null;
 };
 
 const ASSET_SEED: Array<Pick<AssetRow, "name" | "area" | "status" | "start_time">> = [
