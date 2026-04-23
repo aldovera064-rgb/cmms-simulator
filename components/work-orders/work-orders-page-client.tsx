@@ -10,8 +10,11 @@ import { WorkOrderStatusBadge } from "@/components/work-orders/work-order-status
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import { Select } from "@/components/ui/select";
+import { getScopedCompanyId } from "@/lib/company";
 import { ensureSeedData, fetchAssets, fetchTechnicians, fetchWorkOrders } from "@/lib/cmms-data";
 import { useI18n } from "@/lib/i18n/context";
+import { canEditModule, isReadOnlyRole } from "@/lib/rbac";
+import { useSession } from "@/lib/session/context";
 import { supabase } from "@/lib/supabase";
 import { exportWorkOrderPdf } from "@/lib/work-orders/pdf";
 import { buildWorkOrderQrValue } from "@/lib/work-orders/qr";
@@ -102,6 +105,9 @@ function mapWorkOrder(row: {
 
 export function WorkOrdersPageClient({ initialWorkOrders }: Props) {
   const { locale } = useI18n();
+  const { user } = useSession();
+  const activeCompanyId = user?.activeCompanyId ?? null;
+  const companyIdForWrite = getScopedCompanyId(activeCompanyId);
   const [assets, setAssets] = useState<AssetOption[]>([]);
   const [technicians, setTechnicians] = useState<TechnicianOption[]>([]);
   const [workOrders, setWorkOrders] = useState<WorkOrderListItem[]>(initialWorkOrders);
@@ -116,6 +122,8 @@ export function WorkOrdersPageClient({ initialWorkOrders }: Props) {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedWorkOrder, setSelectedWorkOrder] = useState<WorkOrderListItem | null>(null);
+  const canMutate = canEditModule(user?.role, "work_orders");
+  const readOnly = isReadOnlyRole(user?.role);
 
   const copy =
     locale === "en"
@@ -148,12 +156,19 @@ export function WorkOrdersPageClient({ initialWorkOrders }: Props) {
 
   useEffect(() => {
     const load = async () => {
-      await ensureSeedData();
+      if (!activeCompanyId) {
+        setAssets([]);
+        setTechnicians([]);
+        setWorkOrders([]);
+        return;
+      }
+
+      await ensureSeedData(activeCompanyId);
 
       const [assetRows, technicianRows, workOrderRows] = await Promise.all([
-        fetchAssets(),
-        fetchTechnicians(),
-        fetchWorkOrders()
+        fetchAssets(activeCompanyId),
+        fetchTechnicians(activeCompanyId),
+        fetchWorkOrders(activeCompanyId)
       ]);
 
       setAssets(
@@ -174,7 +189,7 @@ export function WorkOrdersPageClient({ initialWorkOrders }: Props) {
     };
 
     void load();
-  }, []);
+  }, [activeCompanyId]);
 
   useEffect(() => {
     const buildQrImages = async () => {
@@ -200,11 +215,12 @@ export function WorkOrdersPageClient({ initialWorkOrders }: Props) {
   }, [filters, workOrders]);
 
   async function refreshWorkOrders() {
-    const rows = await fetchWorkOrders();
+    const rows = await fetchWorkOrders(activeCompanyId);
     setWorkOrders(rows.map(mapWorkOrder));
   }
 
   async function handleCreate(values: WorkOrderCreateInput) {
+    if (!canMutate || !activeCompanyId) return;
     const selectedAsset = assets.find((asset) => asset.id === values.assetId);
     const qrCode = buildWorkOrderQrValue({
       serialNumber: selectedAsset?.serialNumber ?? "NO-SN",
@@ -221,7 +237,8 @@ export function WorkOrdersPageClient({ initialWorkOrders }: Props) {
         status: "OPEN",
         type: values.type,
         technician: values.technicianName || "",
-        qr_code: qrCode
+        qr_code: qrCode,
+        company_id: companyIdForWrite
       }
     ]);
 
@@ -232,6 +249,7 @@ export function WorkOrdersPageClient({ initialWorkOrders }: Props) {
   }
 
   async function handleUpdate(values: WorkOrderUpdateInput) {
+    if (!canMutate) return;
     if (!selectedWorkOrder) return;
 
     const nextStatus = values.status ?? selectedWorkOrder.status;
@@ -289,6 +307,7 @@ export function WorkOrdersPageClient({ initialWorkOrders }: Props) {
   }
 
   async function handleDelete() {
+    if (!canMutate) return;
     if (!selectedWorkOrder) return;
 
     const { error } = await supabase.from("work_orders").delete().eq("id", selectedWorkOrder.id);
@@ -303,7 +322,7 @@ export function WorkOrdersPageClient({ initialWorkOrders }: Props) {
     <div className="space-y-6">
       <Panel className="p-6 flex justify-between items-center border-[#d6d0b8] bg-[#f8f6ea]">
         <h1 className="text-2xl font-semibold">{copy.title}</h1>
-        <Button onClick={() => setCreateOpen(true)}>{copy.newOt}</Button>
+        {canMutate ? <Button onClick={() => setCreateOpen(true)}>{copy.newOt}</Button> : null}
       </Panel>
 
       <Panel className="p-5 border-[#d6d0b8] bg-[#f8f6ea]">
@@ -381,6 +400,7 @@ export function WorkOrdersPageClient({ initialWorkOrders }: Props) {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onSubmit={handleCreate}
+        readOnly={readOnly}
       />
 
       <WorkOrderDetailModal
@@ -390,6 +410,7 @@ export function WorkOrdersPageClient({ initialWorkOrders }: Props) {
         onUpdate={handleUpdate}
         onExportPdf={handleExportPdf}
         onDelete={handleDelete}
+        canEdit={canMutate}
       />
     </div>
   );

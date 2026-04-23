@@ -8,8 +8,11 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CriticalityBadge } from "@/components/ui/criticality-badge";
 import { Panel } from "@/components/ui/panel";
+import { getScopedCompanyId } from "@/lib/company";
 import { ensureSeedData, fetchAssets } from "@/lib/cmms-data";
 import { useI18n } from "@/lib/i18n/context";
+import { canEditModule, isReadOnlyRole } from "@/lib/rbac";
+import { useSession } from "@/lib/session/context";
 import { supabase } from "@/lib/supabase";
 import { AssetFormValues, AssetListItem } from "@/types/assets";
 
@@ -44,6 +47,9 @@ function mapAsset(row: {
 
 export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
   const { locale } = useI18n();
+  const { user } = useSession();
+  const activeCompanyId = user?.activeCompanyId ?? null;
+  const companyIdForWrite = getScopedCompanyId(activeCompanyId);
   const [assets, setAssets] = useState<AssetListItem[]>(initialAssets);
   const [editingAsset, setEditingAsset] = useState<AssetListItem | null>(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -53,6 +59,8 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const canMutateAssets = canEditModule(user?.role, "assets");
+  const readOnly = isReadOnlyRole(user?.role);
 
   const copy =
     locale === "en"
@@ -93,13 +101,18 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
 
   useEffect(() => {
     const load = async () => {
-      await ensureSeedData();
-      const rows = await fetchAssets();
+      if (!activeCompanyId) {
+        setAssets([]);
+        return;
+      }
+
+      await ensureSeedData(activeCompanyId);
+      const rows = await fetchAssets(activeCompanyId);
       setAssets(rows.map(mapAsset));
     };
 
     void load();
-  }, []);
+  }, [activeCompanyId]);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 60000);
@@ -117,12 +130,14 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
   );
 
   const openCreateModal = () => {
+    if (!canMutateAssets) return;
     setEditingAsset(null);
     setFormError("");
     setFormOpen(true);
   };
 
   const openEditModal = (asset: AssetListItem) => {
+    if (!canMutateAssets) return;
     setEditingAsset(asset);
     setFormError("");
     setFormOpen(true);
@@ -137,6 +152,7 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
   };
 
   const submitForm = async (values: AssetFormValues) => {
+    if (!canMutateAssets || !activeCompanyId) return;
     setSaving(true);
     setFormError("");
 
@@ -150,7 +166,8 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
             name: values.name || values.tag,
             area: values.area || "Producción",
             status: "OPERATIVE",
-            start_time: editingAsset?.startTime ?? Date.now()
+            start_time: editingAsset?.startTime ?? Date.now(),
+            company_id: companyIdForWrite
           })
           .eq("id", editingAsset!.id);
 
@@ -161,14 +178,15 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
             name: values.name || values.tag,
             area: values.area || "Producción",
             status: "OPERATIVE",
-            start_time: Date.now()
+            start_time: Date.now(),
+            company_id: companyIdForWrite
           }
         ]);
 
         if (error) throw error;
       }
 
-      const rows = await fetchAssets();
+      const rows = await fetchAssets(activeCompanyId);
       setAssets(rows.map(mapAsset));
       setFormOpen(false);
       setEditingAsset(null);
@@ -180,6 +198,7 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
   };
 
   const confirmDelete = async () => {
+    if (!canMutateAssets) return;
     if (!deleteTarget) return;
 
     setDeleting(true);
@@ -208,7 +227,7 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
             <p className="text-sm text-muted">{copy.subtitle}</p>
           </div>
 
-          <Button onClick={openCreateModal}>{copy.newAsset}</Button>
+          {canMutateAssets ? <Button onClick={openCreateModal}>{copy.newAsset}</Button> : null}
         </div>
       </Panel>
 
@@ -239,12 +258,16 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
                     <CriticalityBadge value={asset.criticality} />
                   </td>
                   <td className="px-4 py-2 text-right align-middle">
-                    <div className="flex justify-end gap-2">
-                      <Button onClick={() => openEditModal(asset)}>{copy.edit}</Button>
-                      <Button variant="danger" onClick={() => setDeleteTarget(asset)}>
-                        {copy.remove}
-                      </Button>
-                    </div>
+                    {readOnly ? (
+                      <span className="text-xs text-muted">Read only</span>
+                    ) : (
+                      <div className="flex justify-end gap-2">
+                        <Button onClick={() => openEditModal(asset)}>{copy.edit}</Button>
+                        <Button variant="danger" onClick={() => setDeleteTarget(asset)}>
+                          {copy.remove}
+                        </Button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}

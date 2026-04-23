@@ -1,8 +1,10 @@
-﻿"use client";
+"use client";
 
 import type { ReactNode } from "react";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
+import { loadAccessibleCompanies, pickActiveCompanyId, readActiveCompanyCookie, writeActiveCompanyCookie } from "@/lib/company";
+import { resolveRole } from "@/lib/rbac";
 import { clearStoredSession, getStoredSession, setStoredSession } from "@/lib/session/storage";
 import { SessionUser } from "@/types/session";
 
@@ -11,6 +13,8 @@ type SessionContextValue = {
   hydrated: boolean;
   signIn: (user: SessionUser) => void;
   signOut: () => void;
+  setActiveCompanyId: (companyId: string) => void;
+  refreshCompanies: () => Promise<void>;
 };
 
 const SessionContext = createContext<SessionContextValue | null>(null);
@@ -37,16 +41,55 @@ function clearUserCookies() {
   if (typeof document === "undefined") return;
   document.cookie = `${USER_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
   document.cookie = `${COUNTRY_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`;
+  writeActiveCompanyCookie(null);
 }
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
+  const applyUser = (nextUser: SessionUser | null) => {
+    if (!nextUser) {
+      clearStoredSession();
+      writeActiveCompanyCookie(null);
+      setUser(null);
+      return;
+    }
+
+    const companies = nextUser.companies ?? [];
+    const activeCompanyId = pickActiveCompanyId(companies, nextUser.activeCompanyId ?? readActiveCompanyCookie());
+    const normalizedUser: SessionUser = {
+      ...nextUser,
+      role: resolveRole(nextUser.name ?? "", nextUser.role),
+      companies,
+      activeCompanyId
+    };
+
+    setStoredSession(normalizedUser);
+    writeActiveCompanyCookie(activeCompanyId);
+    setUser(normalizedUser);
+  };
+
+  const refreshCompanies = async () => {
+    if (!user) return;
+    const companies = await loadAccessibleCompanies(user.id, user.role);
+    applyUser({
+      ...user,
+      companies,
+      activeCompanyId: pickActiveCompanyId(companies, user.activeCompanyId)
+    });
+  };
+
   useEffect(() => {
     if (hasAuthCookie()) {
       const stored = getStoredSession();
-      setUser(stored);
+      const normalized = stored
+        ? {
+            ...stored,
+            role: resolveRole(stored.name ?? "", stored.role)
+          }
+        : stored;
+      applyUser(normalized);
       setAuthCookie();
     } else {
       setUser(null);
@@ -59,9 +102,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = (nextUser: SessionUser) => {
-    setStoredSession(nextUser);
     setAuthCookie();
-    setUser(nextUser);
+    applyUser(nextUser);
+  };
+
+  const setActiveCompanyId = (companyId: string) => {
+    if (!user) return;
+    applyUser({
+      ...user,
+      activeCompanyId: companyId
+    });
   };
 
   const signOut = () => {
@@ -76,7 +126,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       user,
       hydrated,
       signIn,
-      signOut
+      signOut,
+      setActiveCompanyId,
+      refreshCompanies
     }),
     [hydrated, user]
   );

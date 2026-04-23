@@ -1,4 +1,5 @@
-﻿import { supabase } from "@/lib/supabase";
+import { applyCompanyFilter, getScopedCompanyId } from "@/lib/company";
+import { supabase } from "@/lib/supabase";
 
 export type AssetRow = {
   id: string;
@@ -10,6 +11,7 @@ export type AssetRow = {
   criticality: string | null;
   location: string | null;
   created_at: string | null;
+  company_id?: string | null;
 };
 
 export type WorkOrderRow = {
@@ -28,6 +30,7 @@ export type WorkOrderRow = {
   action_taken: string | null;
   qr_code: string | null;
   created_at: string | null;
+  company_id?: string | null;
 };
 
 export type TechnicianRow = {
@@ -35,6 +38,7 @@ export type TechnicianRow = {
   name: string | null;
   skill: string | null;
   active: boolean | null;
+  company_id?: string | null;
 };
 
 export type SparePartRow = {
@@ -43,6 +47,7 @@ export type SparePartRow = {
   stock: number | null;
   location: string | null;
   min_stock: number | null;
+  company_id?: string | null;
 };
 
 const ASSET_SEED: Array<Pick<AssetRow, "name" | "area" | "status" | "start_time">> = [
@@ -77,43 +82,54 @@ const SPARE_PART_SEED: Array<Pick<SparePartRow, "name" | "stock" | "location">> 
   { name: "Fusible 10A", stock: 50, location: "E1" }
 ];
 
-async function ensureTableSeed<TInsert extends object>(table: string, seed: TInsert[]) {
-  const { count, error } = await supabase.from(table).select("id", { count: "exact", head: true });
+async function ensureTableSeed<TInsert extends object>(table: string, seed: TInsert[], activeCompanyId?: string | null) {
+  const companyIdForWrite = getScopedCompanyId(activeCompanyId);
+  let countQuery = supabase.from(table).select("id", { count: "exact", head: true });
+  countQuery = applyCompanyFilter(countQuery, activeCompanyId);
+  const { count, error } = await countQuery;
   if (error) return;
   if ((count ?? 0) > 0) return;
 
-  await supabase.from(table).insert(seed);
+  const payload = seed.map((entry) => (companyIdForWrite ? { ...entry, company_id: companyIdForWrite } : entry));
+  const insertResult = await supabase.from(table).insert(payload);
+  if (insertResult.error && companyIdForWrite && insertResult.error.message.toLowerCase().includes("company_id")) {
+    await supabase.from(table).insert(seed);
+  }
 }
 
-async function safeSelectOrdered<T>(table: string, orderBy: string, ascending: boolean) {
-  const ordered = await supabase.from(table).select("*").order(orderBy, { ascending });
+async function safeSelectOrdered<T>(table: string, orderBy: string, ascending: boolean, activeCompanyId?: string | null) {
+  let orderedQuery = supabase.from(table).select("*");
+  orderedQuery = applyCompanyFilter(orderedQuery, activeCompanyId);
+  const ordered = await orderedQuery.order(orderBy, { ascending });
   if (!ordered.error && ordered.data) return ordered.data as T[];
 
-  const fallback = await supabase.from(table).select("*");
+  let fallbackQuery = supabase.from(table).select("*");
+  fallbackQuery = applyCompanyFilter(fallbackQuery, activeCompanyId);
+  const fallback = await fallbackQuery;
   return (fallback.data ?? []) as T[];
 }
 
-export async function ensureSeedData() {
+export async function ensureSeedData(activeCompanyId?: string | null) {
   await Promise.all([
-    ensureTableSeed("assets", ASSET_SEED),
-    ensureTableSeed("work_orders", WORK_ORDER_SEED),
-    ensureTableSeed("technicians", TECHNICIAN_SEED),
-    ensureTableSeed("spare_parts", SPARE_PART_SEED)
+    ensureTableSeed("assets", ASSET_SEED, activeCompanyId),
+    ensureTableSeed("work_orders", WORK_ORDER_SEED, activeCompanyId),
+    ensureTableSeed("technicians", TECHNICIAN_SEED, activeCompanyId),
+    ensureTableSeed("spare_parts", SPARE_PART_SEED, activeCompanyId)
   ]);
 }
 
-export async function fetchAssets() {
-  return await safeSelectOrdered<AssetRow>("assets", "created_at", false);
+export async function fetchAssets(activeCompanyId?: string | null) {
+  return await safeSelectOrdered<AssetRow>("assets", "created_at", false, activeCompanyId);
 }
 
-export async function fetchWorkOrders() {
-  return await safeSelectOrdered<WorkOrderRow>("work_orders", "created_at", false);
+export async function fetchWorkOrders(activeCompanyId?: string | null) {
+  return await safeSelectOrdered<WorkOrderRow>("work_orders", "created_at", false, activeCompanyId);
 }
 
-export async function fetchTechnicians() {
-  return await safeSelectOrdered<TechnicianRow>("technicians", "name", true);
+export async function fetchTechnicians(activeCompanyId?: string | null) {
+  return await safeSelectOrdered<TechnicianRow>("technicians", "name", true, activeCompanyId);
 }
 
-export async function fetchSpareParts() {
-  return await safeSelectOrdered<SparePartRow>("spare_parts", "name", true);
+export async function fetchSpareParts(activeCompanyId?: string | null) {
+  return await safeSelectOrdered<SparePartRow>("spare_parts", "name", true, activeCompanyId);
 }

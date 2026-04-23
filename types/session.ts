@@ -1,4 +1,10 @@
-export type SessionRole = "admin" | "technician";
+export type SessionRole = "god" | "admin" | "supervisor" | "technician" | "viewer";
+
+export type SessionCompany = {
+  id: string;
+  name: string;
+  role: string;
+};
 
 export type SessionUser = {
   id: string;
@@ -6,4 +12,6 @@ export type SessionUser = {
   name: string;
   role: SessionRole;
   technicianId?: string | null;
+  activeCompanyId?: string | null;
+  companies?: SessionCompany[];
 };

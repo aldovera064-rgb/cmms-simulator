@@ -9,6 +9,7 @@ export type Dictionary = {
     pmPlans: string;
     spareParts: string;
     technicians: string;
+    generalNotes: string;
   };
   auth: {
     title: string;
@@ -30,6 +31,9 @@ export type Dictionary = {
     simulator: string;
     moduleStatus: string;
     sessionRole: string;
+    activeCompany: string;
+    views: string;
+    noCompany: string;
     signOut: string;
     language: string;
     loading: string;

@@ -27,6 +27,7 @@ type WorkOrderFormModalProps = {
   technicians: TechnicianOption[];
   loading?: boolean;
   error?: string;
+  readOnly?: boolean;
   onClose: () => void;
   onSubmit: (values: WorkOrderCreateInput) => void;
 };
@@ -46,6 +47,7 @@ export function WorkOrderFormModal({
   technicians,
   loading,
   error,
+  readOnly = false,
   onClose,
   onSubmit
 }: WorkOrderFormModalProps) {
@@ -116,7 +118,7 @@ export function WorkOrderFormModal({
       >
         <label className="block space-y-2">
           <span className="text-sm text-muted">{copy.searchAsset}</span>
-          <Input onChange={(event) => setSearch(event.target.value)} placeholder="MX-PMP-101" value={search} />
+          <Input disabled={readOnly} onChange={(event) => setSearch(event.target.value)} placeholder="MX-PMP-101" value={search} />
         </label>
 
         <label className="block space-y-2">
@@ -125,6 +127,7 @@ export function WorkOrderFormModal({
             onChange={(event) => setValues((current) => ({ ...current, assetId: event.target.value }))}
             required
             value={values.assetId}
+            disabled={readOnly}
           >
             <option value="">{copy.selectAsset}</option>
             {filteredAssets.map((asset) => (
@@ -146,6 +149,7 @@ export function WorkOrderFormModal({
                 }))
               }
               value={values.type}
+              disabled={readOnly}
             >
               <option value="CORRECTIVE">Correctivo</option>
               <option value="PREVENTIVE">Preventivo</option>
@@ -163,6 +167,7 @@ export function WorkOrderFormModal({
                 }))
               }
               value={values.priority}
+              disabled={readOnly}
             >
               <option value="P1">P1</option>
               <option value="P2">P2</option>
@@ -185,6 +190,7 @@ export function WorkOrderFormModal({
               }));
             }}
             value={values.technicianId ?? ""}
+            disabled={readOnly}
           >
             <option value="">{copy.selectTechnician}</option>
             {technicians.map((technician) => (
@@ -204,6 +210,7 @@ export function WorkOrderFormModal({
             }
             required
             value={values.description}
+            disabled={readOnly}
           />
         </label>
 
@@ -213,7 +220,7 @@ export function WorkOrderFormModal({
           <Button onClick={closeModal} variant="secondary">
             {copy.cancel}
           </Button>
-          <Button disabled={loading} type="submit">
+          <Button disabled={loading || readOnly} type="submit">
             {loading ? copy.creating : copy.create}
           </Button>
         </div>

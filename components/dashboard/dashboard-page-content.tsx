@@ -15,10 +15,14 @@ import {
 } from "recharts";
 
 import { DashboardHero } from "@/components/dashboard/dashboard-hero";
+import { ManageUsersPanel } from "@/components/dashboard/manage-users-panel";
 import { DashboardSummary } from "@/components/dashboard/dashboard-summary";
+import { CompanyViewsPanel } from "@/components/dashboard/company-views-panel";
 import { Panel } from "@/components/ui/panel";
 import { ensureSeedData, fetchAssets, fetchTechnicians, fetchWorkOrders } from "@/lib/cmms-data";
 import { useI18n } from "@/lib/i18n/context";
+import { canManageUsers, isGod } from "@/lib/rbac";
+import { useSession } from "@/lib/session/context";
 
 type DashboardPageContentProps = {
   metrics?: {
@@ -53,21 +57,32 @@ const defaultMetrics = {
 
 export function DashboardPageContent({ metrics }: DashboardPageContentProps) {
   const { dictionary } = useI18n();
+  const { user } = useSession();
+  const activeCompanyId = user?.activeCompanyId ?? null;
   const [mounted, setMounted] = useState(false);
   const [liveMetrics, setLiveMetrics] = useState(metrics ?? defaultMetrics);
   const [assets, setAssets] = useState<AssetLike[]>([]);
   const [workOrders, setWorkOrders] = useState<WorkOrderLike[]>([]);
   const [techniciansCount, setTechniciansCount] = useState(0);
+  const showManageUsers = isGod(user?.role) || canManageUsers(user?.role);
 
   useEffect(() => {
     const load = async () => {
       setMounted(true);
-      await ensureSeedData();
+      if (!activeCompanyId) {
+        setAssets([]);
+        setWorkOrders([]);
+        setTechniciansCount(0);
+        setLiveMetrics(defaultMetrics);
+        return;
+      }
+
+      await ensureSeedData(activeCompanyId);
 
       const [assetRows, workOrderRows, technicianRows] = await Promise.all([
-        fetchAssets(),
-        fetchWorkOrders(),
-        fetchTechnicians()
+        fetchAssets(activeCompanyId),
+        fetchWorkOrders(activeCompanyId),
+        fetchTechnicians(activeCompanyId)
       ]);
 
       setAssets(assetRows);
@@ -82,7 +97,7 @@ export function DashboardPageContent({ metrics }: DashboardPageContentProps) {
     };
 
     void load();
-  }, []);
+  }, [activeCompanyId]);
 
   const assetsChartData = useMemo(() => {
     const knownAreas = ["Producción", "Maquinado", "Servicios", "Formado"];
@@ -176,6 +191,8 @@ export function DashboardPageContent({ metrics }: DashboardPageContentProps) {
       <DashboardHero description={dictionary.dashboard.description} title={dictionary.dashboard.title} />
 
       <DashboardSummary labels={dictionary.dashboard} metrics={liveMetrics} />
+      {user?.companies && (isGod(user?.role) || user.companies.length > 1) ? <CompanyViewsPanel /> : null}
+      {showManageUsers ? <ManageUsersPanel /> : null}
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Panel className="p-5 border-[#d6d0b8] bg-[#f8f6ea]">

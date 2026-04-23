@@ -4,8 +4,11 @@ import { useEffect, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
+import { getScopedCompanyId } from "@/lib/company";
 import { ensureSeedData, fetchSpareParts } from "@/lib/cmms-data";
 import { useI18n } from "@/lib/i18n/context";
+import { canEditModule } from "@/lib/rbac";
+import { useSession } from "@/lib/session/context";
 import { supabase } from "@/lib/supabase";
 
 type SparePart = {
@@ -32,12 +35,17 @@ function mapSparePart(row: { id: string; name: string | null; stock: number | nu
 
 export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClientProps) {
   const { locale } = useI18n();
+  const { user } = useSession();
+  const activeCompanyId = user?.activeCompanyId ?? null;
+  const companyIdForWrite = getScopedCompanyId(activeCompanyId);
   const [spareParts, setSpareParts] = useState<SparePart[]>(initialSpareParts);
   const [name, setName] = useState("");
   const [stock, setStock] = useState("");
   const [minStock, setMinStock] = useState("");
   const [location, setLocation] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const canMutate = canEditModule(user?.role, "spare_parts");
+  const readOnly = !canMutate;
 
   const copy =
     locale === "en"
@@ -76,13 +84,18 @@ export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClient
 
   useEffect(() => {
     const load = async () => {
-      await ensureSeedData();
-      const rows = await fetchSpareParts();
+      if (!activeCompanyId) {
+        setSpareParts([]);
+        return;
+      }
+
+      await ensureSeedData(activeCompanyId);
+      const rows = await fetchSpareParts(activeCompanyId);
       setSpareParts(rows.map(mapSparePart));
     };
 
     void load();
-  }, []);
+  }, [activeCompanyId]);
 
   const resetForm = () => {
     setName("");
@@ -93,6 +106,7 @@ export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClient
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    if (!canMutate || !activeCompanyId) return;
     event.preventDefault();
 
     const trimmedName = name.trim();
@@ -127,14 +141,17 @@ export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClient
       return;
     }
 
-    await supabase.from("spare_parts").insert([{ name: trimmedName, stock: parsedStock, location: trimmedLocation }]);
+    await supabase
+      .from("spare_parts")
+      .insert([{ name: trimmedName, stock: parsedStock, location: trimmedLocation, company_id: companyIdForWrite }]);
 
-    const rows = await fetchSpareParts();
+    const rows = await fetchSpareParts(activeCompanyId);
     setSpareParts(rows.map(mapSparePart));
     resetForm();
   };
 
   const handleEdit = (part: SparePart) => {
+    if (!canMutate) return;
     setEditingId(part.id);
     setName(part.name);
     setStock(part.stock.toString());
@@ -143,6 +160,7 @@ export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClient
   };
 
   const handleDelete = async (partId: string) => {
+    if (!canMutate) return;
     await supabase.from("spare_parts").delete().eq("id", partId);
     setSpareParts((current) => current.filter((part) => part.id !== partId));
 
@@ -161,7 +179,7 @@ export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClient
             <p className="text-sm text-muted">{copy.subtitle}</p>
           </div>
 
-          <Button onClick={resetForm}>{copy.create}</Button>
+          {canMutate ? <Button onClick={resetForm}>{copy.create}</Button> : null}
         </div>
       </Panel>
 
@@ -174,6 +192,7 @@ export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClient
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder={copy.name}
+              disabled={readOnly}
             />
           </label>
 
@@ -186,6 +205,7 @@ export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClient
               placeholder="0"
               type="number"
               min={0}
+              disabled={readOnly}
             />
           </label>
 
@@ -198,6 +218,7 @@ export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClient
               placeholder="0"
               type="number"
               min={0}
+              disabled={readOnly}
             />
           </label>
 
@@ -208,11 +229,14 @@ export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClient
               value={location}
               onChange={(event) => setLocation(event.target.value)}
               placeholder={copy.location}
+              disabled={readOnly}
             />
           </label>
 
           <div className="flex gap-2">
-            <Button type="submit">{editingId ? copy.save : copy.create}</Button>
+            <Button type="submit" disabled={readOnly}>
+              {editingId ? copy.save : copy.create}
+            </Button>
             {editingId ? (
               <Button type="button" variant="secondary" onClick={resetForm}>
                 {copy.cancel}
@@ -243,12 +267,16 @@ export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClient
                   <td className="px-4 py-2 text-left align-middle">{part.minStock}</td>
                   <td className="px-4 py-2 text-left align-middle">{part.location}</td>
                   <td className="px-4 py-2 text-right align-middle">
-                    <div className="flex justify-end gap-2">
-                      <Button onClick={() => handleEdit(part)}>{copy.edit}</Button>
-                      <Button variant="danger" onClick={() => handleDelete(part.id)}>
-                        {copy.remove}
-                      </Button>
-                    </div>
+                    {readOnly ? (
+                      <span className="text-xs text-muted">Read only</span>
+                    ) : (
+                      <div className="flex justify-end gap-2">
+                        <Button onClick={() => handleEdit(part)}>{copy.edit}</Button>
+                        <Button variant="danger" onClick={() => handleDelete(part.id)}>
+                          {copy.remove}
+                        </Button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}

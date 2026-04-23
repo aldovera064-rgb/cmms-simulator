@@ -4,8 +4,11 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
+import { applyCompanyFilter, getScopedCompanyId } from "@/lib/company";
 import { ensureSeedData, fetchAssets } from "@/lib/cmms-data";
 import { useI18n } from "@/lib/i18n/context";
+import { canEditModule, isReadOnlyRole } from "@/lib/rbac";
+import { useSession } from "@/lib/session/context";
 import { supabase } from "@/lib/supabase";
 
 type PMPlan = {
@@ -69,21 +72,31 @@ function mapPlan(row: PMPlanRow): PMPlan | null {
   };
 }
 
-async function fetchPlans() {
-  const { data } = await supabase.from("pm_plans").select("*").order("next_run", { ascending: true });
+async function fetchPlans(activeCompanyId?: string | null) {
+  let query = supabase.from("pm_plans").select("*");
+  query = applyCompanyFilter(query, activeCompanyId);
+  const { data } = await query.order("next_run", { ascending: true });
   const rows = (data ?? []) as PMPlanRow[];
   return rows.map(mapPlan).filter((plan): plan is PMPlan => Boolean(plan));
 }
 
-async function ensurePMSeed(assets: AssetOption[]) {
-  const { count, error } = await supabase.from("pm_plans").select("id", { count: "exact", head: true });
+async function ensurePMSeed(assets: AssetOption[], activeCompanyId?: string | null) {
+  const companyIdForWrite = getScopedCompanyId(activeCompanyId);
+  let query = supabase.from("pm_plans").select("id", { count: "exact", head: true });
+  query = applyCompanyFilter(query, activeCompanyId);
+  const { count, error } = await query;
   if (error || (count ?? 0) > 0 || assets.length === 0) return;
 
-  const insertSeed = PM_SEED.map((item, index) => ({ ...item, asset_id: assets[index % assets.length]?.id ?? assets[0].id }));
+  const insertSeed = PM_SEED.map((item, index) => ({
+    ...item,
+    asset_id: assets[index % assets.length]?.id ?? assets[0].id,
+    company_id: companyIdForWrite
+  }));
   await supabase.from("pm_plans").insert(insertSeed);
 }
 
-async function autoGenerateWorkOrders(plans: PMPlan[], assets: AssetOption[]) {
+async function autoGenerateWorkOrders(plans: PMPlan[], assets: AssetOption[], activeCompanyId?: string | null) {
+  const companyIdForWrite = getScopedCompanyId(activeCompanyId);
   const today = startOfDay(new Date());
   const todayIso = toDateOnlyISO(today);
   const assetsById = new Map(assets.map((asset) => [asset.id, asset]));
@@ -102,7 +115,8 @@ async function autoGenerateWorkOrders(plans: PMPlan[], assets: AssetOption[]) {
       priority: "P2",
       status: "OPEN",
       type: "PREVENTIVE",
-      technician: ""
+      technician: "",
+      company_id: companyIdForWrite
     };
   });
 
@@ -123,6 +137,9 @@ async function autoGenerateWorkOrders(plans: PMPlan[], assets: AssetOption[]) {
 
 export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
   const { locale } = useI18n();
+  const { user } = useSession();
+  const activeCompanyId = user?.activeCompanyId ?? null;
+  const companyIdForWrite = getScopedCompanyId(activeCompanyId);
   const [plans, setPlans] = useState<PMPlan[]>(initialPlans);
   const [assets, setAssets] = useState<AssetOption[]>([]);
   const [assetId, setAssetId] = useState("");
@@ -130,6 +147,8 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
   const [frequency, setFrequency] = useState("");
   const [nextRunDate, setNextRunDate] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
+  const canMutate = canEditModule(user?.role, "pm_plans");
+  const readOnly = isReadOnlyRole(user?.role);
 
   const copy =
     locale === "en"
@@ -188,8 +207,14 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
 
   useEffect(() => {
     const load = async () => {
-      await ensureSeedData();
-      const assetRows = await fetchAssets();
+      if (!activeCompanyId) {
+        setAssets([]);
+        setPlans([]);
+        return;
+      }
+
+      await ensureSeedData(activeCompanyId);
+      const assetRows = await fetchAssets(activeCompanyId);
       const nextAssets = assetRows.map((asset) => ({
         id: asset.id,
         tag: `AS-${asset.id.slice(0, 4).toUpperCase()}`,
@@ -197,15 +222,15 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
       }));
       setAssets(nextAssets);
 
-      await ensurePMSeed(nextAssets);
-      let nextPlans = await fetchPlans();
-      await autoGenerateWorkOrders(nextPlans, nextAssets);
-      nextPlans = await fetchPlans();
+      await ensurePMSeed(nextAssets, activeCompanyId);
+      let nextPlans = await fetchPlans(activeCompanyId);
+      await autoGenerateWorkOrders(nextPlans, nextAssets, activeCompanyId);
+      nextPlans = await fetchPlans(activeCompanyId);
       setPlans(sortPlans(nextPlans));
     };
 
     void load();
-  }, []);
+  }, [activeCompanyId]);
 
   const assetsById = useMemo(() => {
     return new Map(assets.map((asset) => [asset.id, asset]));
@@ -220,6 +245,7 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    if (!canMutate || !activeCompanyId) return;
     event.preventDefault();
 
     const trimmedName = name.trim();
@@ -239,15 +265,16 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
     if (editingId) {
       await supabase.from("pm_plans").update(payload).eq("id", editingId);
     } else {
-      await supabase.from("pm_plans").insert([{ ...payload, last_run: null }]);
+      await supabase.from("pm_plans").insert([{ ...payload, last_run: null, company_id: companyIdForWrite }]);
     }
 
-    const nextPlans = await fetchPlans();
+    const nextPlans = await fetchPlans(activeCompanyId);
     setPlans(sortPlans(nextPlans));
     resetForm();
   };
 
   const handleEdit = (plan: PMPlan) => {
+    if (!canMutate) return;
     setEditingId(plan.id);
     setAssetId(plan.assetId);
     setName(plan.name);
@@ -256,6 +283,7 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
   };
 
   const handleDelete = async (planId: string) => {
+    if (!canMutate) return;
     await supabase.from("pm_plans").delete().eq("id", planId);
     setPlans((current) => current.filter((plan) => plan.id !== planId));
 
@@ -276,7 +304,7 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
             <p className="text-sm text-muted">{copy.subtitle}</p>
           </div>
 
-          <Button onClick={resetForm}>{copy.createPlan}</Button>
+          {canMutate ? <Button onClick={resetForm}>{copy.createPlan}</Button> : null}
         </div>
       </Panel>
 
@@ -288,6 +316,7 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
               className="w-full rounded-2xl border border-border bg-panelAlt px-3 py-2.5 text-sm outline-none focus:border-accent"
               value={assetId}
               onChange={(event) => setAssetId(event.target.value)}
+              disabled={readOnly}
             >
               <option value="">{copy.selectAsset}</option>
               {assets.map((asset) => (
@@ -305,6 +334,7 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder={copy.planName}
+              disabled={readOnly}
             />
           </label>
 
@@ -317,6 +347,7 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
               value={frequency}
               onChange={(event) => setFrequency(event.target.value)}
               placeholder="30"
+              disabled={readOnly}
             />
           </label>
 
@@ -327,11 +358,14 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
               type="date"
               value={nextRunDate}
               onChange={(event) => setNextRunDate(event.target.value)}
+              disabled={readOnly}
             />
           </label>
 
           <div className="flex gap-2">
-            <Button type="submit">{editingId ? copy.save : copy.create}</Button>
+            <Button type="submit" disabled={readOnly}>
+              {editingId ? copy.save : copy.create}
+            </Button>
             {editingId ? (
               <Button type="button" variant="secondary" onClick={resetForm}>
                 {copy.cancel}
@@ -377,12 +411,16 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
                       {overdue ? <span className="rounded-full bg-danger/20 px-3 py-1 text-xs text-danger">{copy.overdue}</span> : copy.upToDate}
                     </td>
                     <td className="px-4 py-2 text-right align-middle">
-                      <div className="flex justify-end gap-2">
-                        <Button onClick={() => handleEdit(plan)}>{copy.edit}</Button>
-                        <Button variant="danger" onClick={() => handleDelete(plan.id)}>
-                          {copy.remove}
-                        </Button>
-                      </div>
+                      {readOnly ? (
+                        <span className="text-xs text-muted">Read only</span>
+                      ) : (
+                        <div className="flex justify-end gap-2">
+                          <Button onClick={() => handleEdit(plan)}>{copy.edit}</Button>
+                          <Button variant="danger" onClick={() => handleDelete(plan.id)}>
+                            {copy.remove}
+                          </Button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 );

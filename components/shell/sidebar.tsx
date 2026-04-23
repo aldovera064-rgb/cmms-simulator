@@ -12,7 +12,8 @@ const navigation = [
   { href: "/ordenes", key: "workOrders" },
   { href: "/pm-plans", key: "pmPlans" },
   { href: "/spare-parts", key: "spareParts" },
-  { href: "/technicians", key: "technicians" }
+  { href: "/technicians", key: "technicians" },
+  { href: "/bitacora", key: "generalNotes" }
 ] as const;
 
 export function Sidebar() {

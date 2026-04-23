@@ -9,7 +9,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       workOrders: "Órdenes de Trabajo",
       pmPlans: "Plan de Mantenimiento",
       spareParts: "Refacciones",
-      technicians: "Técnicos"
+      technicians: "Técnicos",
+      generalNotes: "Bitácora general"
     },
     auth: {
       title: "Ingreso al simulador",
@@ -31,6 +32,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       simulator: "Plataforma de mantenimiento industrial",
       moduleStatus: "Estado",
       sessionRole: "Rol",
+      activeCompany: "Empresa activa",
+      views: "Vistas",
+      noCompany: "Sin empresa asignada",
       signOut: "Cerrar sesión",
       language: "Idioma",
       loading: "Cargando simulador..."
@@ -72,7 +76,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       workOrders: "Work Orders",
       pmPlans: "Maintenance Plan",
       spareParts: "Spare Parts",
-      technicians: "Technicians"
+      technicians: "Technicians",
+      generalNotes: "General logbook"
     },
     auth: {
       title: "Simulator sign in",
@@ -94,6 +99,9 @@ export const dictionaries: Record<Locale, Dictionary> = {
       simulator: "Industrial maintenance platform",
       moduleStatus: "Status",
       sessionRole: "Role",
+      activeCompany: "Active company",
+      views: "Views",
+      noCompany: "No company assigned",
       signOut: "Sign out",
       language: "Language",
       loading: "Loading simulator..."

@@ -20,6 +20,7 @@ type WorkOrderDetailModalProps = {
   onUpdate: (values: WorkOrderUpdateInput) => Promise<void>;
   onExportPdf: () => void;
   onDelete: () => Promise<void>;
+  canEdit?: boolean;
 };
 
 export function WorkOrderDetailModal({
@@ -30,7 +31,8 @@ export function WorkOrderDetailModal({
   onClose,
   onUpdate,
   onExportPdf,
-  onDelete
+  onDelete,
+  canEdit = true
 }: WorkOrderDetailModalProps) {
   const [technicianName, setTechnicianName] = useState("");
   const [description, setDescription] = useState("");
@@ -86,7 +88,7 @@ export function WorkOrderDetailModal({
         <div className="grid gap-4 md:grid-cols-2">
           <label className="block space-y-2">
             <span className="text-sm text-muted">Tecnico</span>
-            <Input onChange={(event) => setTechnicianName(event.target.value)} value={technicianName} />
+            <Input disabled={!canEdit} onChange={(event) => setTechnicianName(event.target.value)} value={technicianName} />
           </label>
 
           <div className="rounded-2xl border border-border bg-panelAlt/65 p-4">
@@ -101,11 +103,11 @@ export function WorkOrderDetailModal({
 
         <label className="block space-y-2">
           <span className="text-sm text-muted">Descripcion</span>
-          <Textarea onChange={(event) => setDescription(event.target.value)} value={description} />
+          <Textarea disabled={!canEdit} onChange={(event) => setDescription(event.target.value)} value={description} />
         </label>
 
         <div className="flex flex-wrap gap-3">
-          {workOrder.status === "OPEN" ? (
+          {canEdit && workOrder.status === "OPEN" ? (
             <Button
               disabled={loading}
               onClick={() => onUpdate({ status: "IN_PROGRESS", technicianName, description })}
@@ -114,7 +116,7 @@ export function WorkOrderDetailModal({
             </Button>
           ) : null}
 
-          {workOrder.status === "IN_PROGRESS" ? (
+          {canEdit && workOrder.status === "IN_PROGRESS" ? (
             <Button
               disabled={loading}
               onClick={() => onUpdate({ status: "ON_HOLD", technicianName, description })}
@@ -124,7 +126,7 @@ export function WorkOrderDetailModal({
             </Button>
           ) : null}
 
-          {workOrder.status === "ON_HOLD" ? (
+          {canEdit && workOrder.status === "ON_HOLD" ? (
             <Button
               disabled={loading}
               onClick={() => onUpdate({ status: "IN_PROGRESS", technicianName, description })}
@@ -134,7 +136,7 @@ export function WorkOrderDetailModal({
             </Button>
           ) : null}
 
-          {workOrder.status !== "CLOSED" ? (
+          {canEdit && workOrder.status !== "CLOSED" ? (
             <Button
               disabled={loading}
               onClick={() => onUpdate({ technicianName, description })}
@@ -144,16 +146,18 @@ export function WorkOrderDetailModal({
             </Button>
           ) : null}
 
-          <Button disabled={loading} onClick={onDelete} variant="danger">
-            Eliminar
-          </Button>
+          {canEdit ? (
+            <Button disabled={loading} onClick={onDelete} variant="danger">
+              Eliminar
+            </Button>
+          ) : null}
 
           <Button disabled={loading} onClick={onExportPdf} variant="secondary">
             Export PDF
           </Button>
         </div>
 
-        {workOrder.status !== "CLOSED" ? (
+        {canEdit && workOrder.status !== "CLOSED" ? (
           <div className="space-y-4 rounded-2xl border border-border bg-panelAlt/50 p-4">
             <div>
               <p className="text-xs uppercase tracking-[0.2em] text-accent">Cierre de OT</p>
