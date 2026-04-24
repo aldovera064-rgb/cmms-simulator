@@ -169,7 +169,8 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
             start_time: editingAsset?.startTime ?? Date.now(),
             company_id: companyIdForWrite
           })
-          .eq("id", editingAsset!.id);
+          .eq("id", editingAsset!.id)
+          .eq("company_id", activeCompanyId);
 
         if (error) throw error;
       } else {
@@ -205,7 +206,7 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
     setDeleteError("");
 
     try {
-      const { error } = await supabase.from("assets").delete().eq("id", deleteTarget.id);
+      const { error } = await supabase.from("assets").delete().eq("id", deleteTarget.id).eq("company_id", activeCompanyId);
       if (error) throw error;
 
       setAssets((current) => current.filter((item) => item.id !== deleteTarget.id));

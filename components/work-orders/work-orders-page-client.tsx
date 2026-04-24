@@ -269,7 +269,8 @@ export function WorkOrdersPageClient({ initialWorkOrders }: Props) {
         root_cause: values.rootCause ?? selectedWorkOrder.rootCause,
         action_taken: values.actionTaken ?? values.workPerformed ?? selectedWorkOrder.actionTaken
       })
-      .eq("id", selectedWorkOrder.id);
+      .eq("id", selectedWorkOrder.id)
+      .eq("company_id", activeCompanyId);
 
     if (!error) {
       if (nextStatus === "CLOSED") {
@@ -310,7 +311,7 @@ export function WorkOrdersPageClient({ initialWorkOrders }: Props) {
     if (!canMutate) return;
     if (!selectedWorkOrder) return;
 
-    const { error } = await supabase.from("work_orders").delete().eq("id", selectedWorkOrder.id);
+    const { error } = await supabase.from("work_orders").delete().eq("id", selectedWorkOrder.id).eq("company_id", activeCompanyId);
 
     if (!error) {
       setSelectedWorkOrder(null);

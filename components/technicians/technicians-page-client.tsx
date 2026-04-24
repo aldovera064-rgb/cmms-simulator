@@ -110,7 +110,8 @@ export function TechniciansPageClient({ initialTechnicians }: TechniciansPageCli
       await supabase
         .from("technicians")
         .update({ name: trimmedName, skill: trimmedSpecialty, company_id: companyIdForWrite })
-        .eq("id", editingId);
+        .eq("id", editingId)
+        .eq("company_id", activeCompanyId);
     } else {
       await supabase.from("technicians").insert([{ name: trimmedName, skill: trimmedSpecialty, company_id: companyIdForWrite }]);
       await ensureTechnicianAdminUser(trimmedName);
@@ -130,7 +131,7 @@ export function TechniciansPageClient({ initialTechnicians }: TechniciansPageCli
 
   const handleDelete = async (id: string) => {
     if (!canMutate) return;
-    await supabase.from("technicians").delete().eq("id", id);
+    await supabase.from("technicians").delete().eq("id", id).eq("company_id", activeCompanyId);
     setTechnicians((current) => current.filter((technician) => technician.id !== id));
     if (editingId === id) resetForm();
   };

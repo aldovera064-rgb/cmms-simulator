@@ -10,12 +10,11 @@ import { useSession } from "@/lib/session/context";
 
 function normalizeCountry(value: string) {
   if (!value) return "mx";
-  if (value === "mx" || value === "us" || value === "ca" || value === "pride") return value;
+  if (value === "mx" || value === "us" || value === "ca") return value;
   return "mx";
 }
 
 function getFlagSrc(country: string) {
-  if (country === "pride") return "/flags/pride.svg";
   return `https://flagcdn.com/w40/${country}.png`;
 }
 
@@ -27,6 +26,7 @@ export function Topbar() {
   const [cookieCountry, setCookieCountry] = useState("mx");
   const role = user?.role ?? "-";
   const companies = user?.companies ?? [];
+  const canSwitchCompany = user?.role === "god" || (user?.role === "admin" && companies.length > 1);
   const activeCompanyName = useMemo(
     () => getCompanyName(companies, user?.activeCompanyId) || dictionary.shell.noCompany,
     [companies, dictionary.shell.noCompany, user?.activeCompanyId]
@@ -69,7 +69,7 @@ export function Topbar() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        {companies.length > 0 ? (
+        {canSwitchCompany ? (
           <label className="flex items-center gap-2 rounded-2xl border border-border bg-panelAlt/80 px-3 py-2 text-sm">
             <span className="text-muted">{switcherLabel}</span>
             <select

@@ -263,7 +263,7 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
     };
 
     if (editingId) {
-      await supabase.from("pm_plans").update(payload).eq("id", editingId);
+      await supabase.from("pm_plans").update(payload).eq("id", editingId).eq("company_id", activeCompanyId);
     } else {
       await supabase.from("pm_plans").insert([{ ...payload, last_run: null, company_id: companyIdForWrite }]);
     }
@@ -284,7 +284,7 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
 
   const handleDelete = async (planId: string) => {
     if (!canMutate) return;
-    await supabase.from("pm_plans").delete().eq("id", planId);
+    await supabase.from("pm_plans").delete().eq("id", planId).eq("company_id", activeCompanyId);
     setPlans((current) => current.filter((plan) => plan.id !== planId));
 
     if (editingId === planId) {

@@ -38,49 +38,22 @@ export function ManageUsersPanel() {
   const canAccessPanel = canEditModule(user?.role, "manage_users");
 
   async function loadUsers() {
-    if (actorRole !== "god" && !activeCompanyId) {
+    if (!activeCompanyId) {
       setUsers([]);
       return;
     }
 
-    if (actorRole !== "god" && activeCompanyId) {
-      const membershipResponse = await supabase.from("user_companies").select("user_id").eq("company_id", activeCompanyId);
-      if (membershipResponse.error) {
-        const message = membershipResponse.error.message.toLowerCase();
-        const missingCompanyInfra =
-          message.includes("user_companies") || message.includes("relationship") || message.includes("schema cache");
-        if (!missingCompanyInfra) {
-          setUsers([]);
-          return;
-        }
-      }
+    const membershipResponse = await supabase.from("user_companies").select("user_id").eq("company_id", activeCompanyId);
+    const userIds = (membershipResponse.data ?? [])
+      .map((row) => row.user_id as string | null)
+      .filter((value): value is string => Boolean(value));
 
-      const userIds = (membershipResponse.data ?? [])
-        .map((row) => row.user_id as string | null)
-        .filter((value): value is string => Boolean(value));
-
-      if (!membershipResponse.error && userIds.length === 0) {
-        setUsers([]);
-        return;
-      }
-
-      if (!membershipResponse.error) {
-        const scopedQuery = await supabase.from("admins").select("id, username, role, country").in("id", userIds).order("username", { ascending: true });
-        if (!scopedQuery.error) {
-          setUsers(
-            (scopedQuery.data ?? []).map((row) => ({
-              id: row.id as string,
-              username: (row.username as string) ?? "",
-              role: normalizeUsername((row.username as string) ?? "") === GOD_USERNAME ? "god" : normalizeRole(row.role as string | null | undefined),
-              country: (row.country as string | null | undefined) ?? null
-            }))
-          );
-          return;
-        }
-      }
+    if (membershipResponse.error || userIds.length === 0) {
+      setUsers([]);
+      return;
     }
 
-    const preferredQuery = await supabase.from("admins").select("id, username, role, country").order("username", { ascending: true });
+    const preferredQuery = await supabase.from("admins").select("id, username, role, country").in("id", userIds).order("username", { ascending: true });
     if (!preferredQuery.error) {
       setUsers(
         (preferredQuery.data ?? []).map((row) => ({
@@ -93,7 +66,7 @@ export function ManageUsersPanel() {
       return;
     }
 
-    const fallbackQuery = await supabase.from("admins").select("id, username, country").order("username", { ascending: true });
+    const fallbackQuery = await supabase.from("admins").select("id, username, country").in("id", userIds).order("username", { ascending: true });
     setUsers(
       (fallbackQuery.data ?? []).map((row) => ({
         id: row.id as string,
@@ -113,7 +86,7 @@ export function ManageUsersPanel() {
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const normalizedUsername = normalizeUsername(username);
-    if (!normalizedUsername || !password || !canCreateRole(actorRole, role)) return;
+    if (!normalizedUsername || !password || !canCreateRole(actorRole, role) || !activeCompanyId) return;
 
     setLoading(true);
     console.log("ROLE:", role);

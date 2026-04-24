@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
-import { loadAccessibleCompanies, pickActiveCompanyId, readActiveCompanyCookie, writeActiveCompanyCookie } from "@/lib/company";
+import { loadAccessibleCompanies, loadFirstAssignedCompanyId, pickActiveCompanyId, readActiveCompanyCookie, writeActiveCompanyCookie } from "@/lib/company";
 import { resolveRole } from "@/lib/rbac";
 import { clearStoredSession, getStoredSession, setStoredSession } from "@/lib/session/storage";
 import { SessionUser } from "@/types/session";
@@ -13,6 +13,7 @@ type SessionContextValue = {
   hydrated: boolean;
   signIn: (user: SessionUser) => void;
   signOut: () => void;
+  logout: () => Promise<void>;
   setActiveCompanyId: (companyId: string) => void;
   refreshCompanies: () => Promise<void>;
 };
@@ -48,7 +49,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
-  const applyUser = (nextUser: SessionUser | null) => {
+  const applyUser = async (nextUser: SessionUser | null) => {
     if (!nextUser) {
       clearStoredSession();
       writeActiveCompanyCookie(null);
@@ -56,11 +57,18 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    const companies = nextUser.companies ?? [];
-    const activeCompanyId = pickActiveCompanyId(companies, nextUser.activeCompanyId ?? readActiveCompanyCookie());
+    const resolvedRole = resolveRole(nextUser.name ?? "", nextUser.role);
+    const companies = nextUser.companies ?? (await loadAccessibleCompanies(nextUser.id, resolvedRole));
+    const cookieCompanyId = readActiveCompanyCookie();
+    const fallbackCompanyId = resolvedRole === "god" ? null : await loadFirstAssignedCompanyId(nextUser.id);
+    const activeCompanyId =
+      nextUser.activeCompanyId && companies.some((company) => company.id === nextUser.activeCompanyId)
+        ? nextUser.activeCompanyId
+        : pickActiveCompanyId(companies, resolvedRole, cookieCompanyId, fallbackCompanyId);
+
     const normalizedUser: SessionUser = {
       ...nextUser,
-      role: resolveRole(nextUser.name ?? "", nextUser.role),
+      role: resolvedRole,
       companies,
       activeCompanyId
     };
@@ -72,46 +80,60 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const refreshCompanies = async () => {
     if (!user) return;
-    const companies = await loadAccessibleCompanies(user.id, user.role);
-    applyUser({
+    await applyUser({
       ...user,
-      companies,
-      activeCompanyId: pickActiveCompanyId(companies, user.activeCompanyId)
+      companies: undefined
     });
   };
 
   useEffect(() => {
-    if (hasAuthCookie()) {
-      const stored = getStoredSession();
-      const normalized = stored
-        ? {
-            ...stored,
-            role: resolveRole(stored.name ?? "", stored.role)
-          }
-        : stored;
-      applyUser(normalized);
-      setAuthCookie();
-    } else {
-      setUser(null);
-      clearStoredSession();
-      clearAuthCookie();
-      clearUserCookies();
-    }
+    const hydrateSession = async () => {
+      if (hasAuthCookie()) {
+        const stored = getStoredSession();
+        const normalized = stored
+          ? {
+              ...stored,
+              role: resolveRole(stored.name ?? "", stored.role)
+            }
+          : stored;
+        await applyUser(normalized);
+        setAuthCookie();
+      } else {
+        setUser(null);
+        clearStoredSession();
+        clearAuthCookie();
+        clearUserCookies();
+      }
 
-    setHydrated(true);
+      setHydrated(true);
+    };
+
+    void hydrateSession();
   }, []);
 
   const signIn = (nextUser: SessionUser) => {
     setAuthCookie();
-    applyUser(nextUser);
+    const normalizedUser: SessionUser = {
+      ...nextUser,
+      role: resolveRole(nextUser.name ?? "", nextUser.role)
+    };
+
+    setStoredSession(normalizedUser);
+    writeActiveCompanyCookie(normalizedUser.activeCompanyId ?? null);
+    setUser(normalizedUser);
   };
 
   const setActiveCompanyId = (companyId: string) => {
     if (!user) return;
-    applyUser({
+
+    const normalizedUser: SessionUser = {
       ...user,
       activeCompanyId: companyId
-    });
+    };
+
+    setStoredSession(normalizedUser);
+    writeActiveCompanyCookie(companyId);
+    setUser(normalizedUser);
   };
 
   const signOut = () => {
@@ -121,12 +143,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setUser(null);
   };
 
+  const logout = async () => {
+    signOut();
+  };
+
   const value = useMemo(
     () => ({
       user,
       hydrated,
       signIn,
       signOut,
+      logout,
       setActiveCompanyId,
       refreshCompanies
     }),

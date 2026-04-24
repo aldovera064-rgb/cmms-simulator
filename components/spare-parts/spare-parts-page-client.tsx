@@ -122,7 +122,8 @@ export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClient
       await supabase
         .from("spare_parts")
         .update({ name: trimmedName, stock: parsedStock, location: trimmedLocation })
-        .eq("id", editingId);
+        .eq("id", editingId)
+        .eq("company_id", activeCompanyId);
 
       setSpareParts((current) =>
         current.map((part) =>
@@ -161,7 +162,7 @@ export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClient
 
   const handleDelete = async (partId: string) => {
     if (!canMutate) return;
-    await supabase.from("spare_parts").delete().eq("id", partId);
+    await supabase.from("spare_parts").delete().eq("id", partId).eq("company_id", activeCompanyId);
     setSpareParts((current) => current.filter((part) => part.id !== partId));
 
     if (editingId === partId) {

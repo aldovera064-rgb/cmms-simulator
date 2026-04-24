@@ -110,6 +110,10 @@ async function safeSelectOrdered<T>(table: string, orderBy: string, ascending: b
 }
 
 export async function ensureSeedData(activeCompanyId?: string | null) {
+  if (activeCompanyId) {
+    return;
+  }
+
   await Promise.all([
     ensureTableSeed("assets", ASSET_SEED, activeCompanyId),
     ensureTableSeed("work_orders", WORK_ORDER_SEED, activeCompanyId),

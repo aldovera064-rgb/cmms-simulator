@@ -64,7 +64,7 @@ export function GeneralNotesPageClient({ initialNotes = [] }: Props) {
   };
 
   const handleDelete = async (id: string) => {
-    await supabase.from("notes").delete().eq("id", id);
+    await supabase.from("notes").delete().eq("id", id).eq("company_id", activeCompanyId);
     setNotes((current) => current.filter((entry) => entry.id !== id));
   };
 

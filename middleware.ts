@@ -8,6 +8,8 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const authenticated = isAuthenticated(request);
   const isLoginRoute = pathname === "/login";
+  const isSelectCompanyRoute = pathname === "/select-company";
+  const hasActiveCompany = Boolean(request.cookies.get("cmms-company")?.value);
 
   if (!authenticated && !isLoginRoute) {
     const loginUrl = new URL("/login", request.url);
@@ -15,6 +17,11 @@ export function middleware(request: NextRequest) {
   }
 
   if (authenticated && isLoginRoute) {
+    const nextUrl = new URL(hasActiveCompany ? "/dashboard" : "/select-company", request.url);
+    return NextResponse.redirect(nextUrl);
+  }
+
+  if (authenticated && isSelectCompanyRoute && hasActiveCompany) {
     const dashboardUrl = new URL("/dashboard", request.url);
     return NextResponse.redirect(dashboardUrl);
   }

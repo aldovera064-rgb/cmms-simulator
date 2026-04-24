@@ -1,22 +1,22 @@
 "use client";
 
 import { ReactNode, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import { useSession } from "@/lib/session/context";
 
 export function CompanyAccessGuard({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
   const router = useRouter();
-  const { hydrated, user, signOut } = useSession();
+  const { hydrated, user } = useSession();
 
   useEffect(() => {
     if (!hydrated || !user) return;
-    if (user.role === "god") return;
-    if ((user.companies ?? []).length > 0 && user.activeCompanyId) return;
+    if (pathname === "/select-company") return;
+    if (user.activeCompanyId) return;
 
-    signOut();
-    router.replace("/login");
-  }, [hydrated, router, signOut, user]);
+    router.replace("/select-company");
+  }, [hydrated, pathname, router, user]);
 
   return <>{children}</>;
 }

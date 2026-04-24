@@ -6,12 +6,12 @@ import { useRouter } from "next/navigation";
 import { Panel } from "@/components/ui/panel";
 import { loadAccessibleCompanies, pickActiveCompanyId, writeActiveCompanyCookie } from "@/lib/company";
 import { useI18n } from "@/lib/i18n/context";
-import { GOD_USERNAME, ROLE_ORDER, UserRole, normalizeRole, normalizeUsername, resolveRole } from "@/lib/rbac";
+import { GOD_USERNAME, normalizeRole, normalizeUsername, resolveRole } from "@/lib/rbac";
 import { useSession } from "@/lib/session/context";
 import { supabase } from "@/lib/supabase";
 import { SessionUser } from "@/types/session";
 
-const COUNTRIES = ["mx", "us", "ca", "pride"] as const;
+const COUNTRIES = ["mx", "us", "ca"] as const;
 
 type Country = (typeof COUNTRIES)[number];
 
@@ -28,11 +28,9 @@ type CompanyRow = {
   name: string | null;
 };
 
-const COUNTRY_OPTIONS: Country[] = ["mx", "us", "ca", "pride"];
-const SIGNUP_ROLE_OPTIONS = ROLE_ORDER.filter((role) => role !== "god");
+const COUNTRY_OPTIONS: Country[] = ["mx", "us", "ca"];
 
 function getFlagSrc(country: string) {
-  if (country === "pride") return "/flags/pride.svg";
   return `https://flagcdn.com/w40/${country}.png`;
 }
 
@@ -40,7 +38,7 @@ function isRoleColumnMissing(message: string) {
   return message.toLowerCase().includes("role");
 }
 
-async function createAdmin(username: string, password: string, country: string, role: UserRole) {
+async function createAdmin(username: string, password: string, country: string, role: "admin" | "viewer") {
   if (password.length < 5) {
     alert("Password must be at least 5 characters");
     return null;
@@ -101,57 +99,15 @@ async function createAdmin(username: string, password: string, country: string, 
   return null;
 }
 
-async function createCompanyForUser(userId: string, companyName: string) {
-  try {
-    if (!userId) {
-      throw new Error("Missing user id");
-    }
-
-    const trimmedName = companyName.trim();
-    if (!trimmedName) {
-      throw new Error("Missing company name");
-    }
-
-    const { data: company, error: companyError } = await supabase
-      .from("companies")
-      .insert([{ name: trimmedName, created_by: userId }])
-      .select("id, name")
-      .single<CompanyRow>();
-
-    if (companyError || !company) {
-      throw companyError ?? new Error("Company was not returned");
-    }
-
-    const { error: relationError } = await supabase.from("user_companies").insert([
-      {
-        user_id: userId,
-        company_id: company.id,
-        role: "admin"
-      }
-    ]);
-
-    if (relationError) {
-      throw relationError;
-    }
-
-    return company;
-  } catch (error) {
-    console.error("CREATE COMPANY ERROR:", error);
-    alert("No se pudo crear empresa");
-    return null;
-  }
-}
-
 export function LoginForm() {
   const router = useRouter();
   const { dictionary, locale, setLocale } = useI18n();
-  const { hydrated, signIn, user, signOut } = useSession();
+  const { hydrated, setActiveCompanyId, signIn, user } = useSession();
 
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [country, setCountry] = useState("");
-  const [signupRole, setSignupRole] = useState<UserRole>("viewer");
   const [shouldCreateCompany, setShouldCreateCompany] = useState<"yes" | "no">("yes");
   const [companyName, setCompanyName] = useState("");
   const [loading, setLoading] = useState(false);
@@ -159,7 +115,7 @@ export function LoginForm() {
 
   useEffect(() => {
     if (hydrated && user) {
-      router.replace("/dashboard");
+      router.replace(user.activeCompanyId ? "/dashboard" : "/select-company");
     }
   }, [hydrated, router, user]);
 
@@ -183,14 +139,8 @@ export function LoginForm() {
     console.log("ROLE:", roleColumnExists ? admin.role : "admin");
 
     const companies = await loadAccessibleCompanies(admin.id, resolvedRole);
+    const activeCompanyId = pickActiveCompanyId(companies, resolvedRole, preferredCompanyId);
 
-    if (resolvedRole !== "god" && companies.length === 0) {
-      signOut();
-      setSignupMessage(blockedAccessMessage);
-      return;
-    }
-
-    const activeCompanyId = pickActiveCompanyId(companies, preferredCompanyId);
     const nextUser: SessionUser = {
       id: admin.id,
       email: admin.username,
@@ -202,9 +152,12 @@ export function LoginForm() {
     };
 
     signIn(nextUser);
+    if (activeCompanyId) {
+      setActiveCompanyId(activeCompanyId);
+    }
     setAuthCookies(admin);
     writeActiveCompanyCookie(activeCompanyId);
-    window.location.href = "/dashboard";
+    router.push(activeCompanyId ? "/dashboard" : "/select-company");
   };
 
   const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
@@ -263,24 +216,73 @@ export function LoginForm() {
     setSignupMessage("");
 
     try {
-      const requestedRole = shouldCreateCompany === "yes" ? "admin" : signupRole;
+      // ── STEP 1: CREATE USER ──
+      const requestedRole = shouldCreateCompany === "yes" ? "admin" : "viewer";
       const created = await createAdmin(username, password, country, requestedRole);
       if (!created) return;
 
-      if (shouldCreateCompany === "yes") {
-        const company = await createCompanyForUser(created.id, companyName);
-        if (!company) return;
+      console.log("✅ STEP 1 DONE — USER CREATED:", created.id);
 
-        console.log("ROLE:", "admin");
-        await supabase.from("admins").update({ role: "admin" }).eq("id", created.id);
-        await persistSessionAndRedirect({ ...created, role: "admin" }, true, company.id);
+      // If user chose NOT to create a company, stop here
+      if (shouldCreateCompany !== "yes") {
+        setSignupMessage(blockedAccessMessage);
+        setMode("login");
+        setPassword("");
+        setCompanyName("");
         return;
       }
 
-      setSignupMessage(blockedAccessMessage);
-      setMode("login");
-      setPassword("");
-      setCompanyName("");
+      // ── STEP 2: CREATE COMPANY ──
+      console.log("── STEP 2: CREATING COMPANY ──");
+      console.log("USER:", created.id);
+      console.log("COMPANY NAME:", companyName);
+
+      const { data: company, error: companyError } = await supabase
+        .from("companies")
+        .insert({ name: companyName.trim(), created_by: created.id })
+        .select()
+        .single();
+
+      console.log("COMPANY CREATED:", company);
+
+      if (!company || companyError) {
+        console.error("COMPANY CREATION FAILED:", companyError);
+        alert("Error creating company");
+        return;
+      }
+
+      console.log("✅ STEP 2 DONE — COMPANY:", company.id);
+
+      // ── STEP 3: INSERT USER_COMPANIES (NO CONDITIONS) ──
+      console.log("── STEP 3: INSERTING USER_COMPANIES ──");
+      console.log("USER ID:", created.id);
+      console.log("COMPANY ID:", company.id);
+
+      const { data: relationData, error: relationError } = await supabase
+        .from("user_companies")
+        .insert({
+          user_id: created.id,
+          company_id: company.id,
+          role: "admin"
+        })
+        .select();
+
+      console.log("USER_COMPANIES RESULT:", relationData);
+
+      if (relationError) {
+        console.error("USER_COMPANIES INSERT ERROR:", relationError);
+        alert("Error linking user to company: " + relationError.message);
+        return;
+      }
+
+      console.log("✅ STEP 3 DONE — USER LINKED TO COMPANY");
+
+      // ── STEP 4: SET ROLE TO ADMIN ──
+      await supabase.from("admins").update({ role: "admin" }).eq("id", created.id);
+
+      // ── STEP 5: REDIRECT ──
+      console.log("── STEP 5: REDIRECTING TO DASHBOARD ──");
+      await persistSessionAndRedirect({ ...created, role: "admin" }, true, company.id);
     } finally {
       setLoading(false);
     }
@@ -366,7 +368,7 @@ export function LoginForm() {
           <>
             <div className="space-y-2">
               <label className="text-sm text-muted">{dictionary.auth.country}</label>
-              <div className="grid grid-cols-4 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 {COUNTRY_OPTIONS.map((option) => {
                   const selected = country === option;
                   return (
@@ -384,21 +386,6 @@ export function LoginForm() {
                 })}
               </div>
               {!country ? <p className="text-xs text-muted">{dictionary.auth.selectCountry}</p> : null}
-            </div>
-
-            <div className="space-y-2">
-              <label className="text-sm text-muted">Rol</label>
-              <select
-                className="w-full rounded-2xl border border-border bg-panelAlt px-4 py-3 text-sm"
-                value={signupRole}
-                onChange={(event) => setSignupRole(normalizeRole(event.target.value))}
-              >
-                {SIGNUP_ROLE_OPTIONS.map((roleOption) => (
-                  <option key={roleOption} value={roleOption}>
-                    {roleOption}
-                  </option>
-                ))}
-              </select>
             </div>
 
             <div className="space-y-3 rounded-2xl border border-border bg-panelAlt/60 p-4">

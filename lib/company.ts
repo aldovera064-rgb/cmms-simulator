@@ -1,14 +1,11 @@
 import { supabase } from "@/lib/supabase";
-import { SessionCompany } from "@/types/session";
+import { SessionCompany, SessionRole } from "@/types/session";
 
 export const ACTIVE_COMPANY_COOKIE = "cmms-company";
-export const LEGACY_COMPANY_ID = "legacy-global";
 
 type CompanyRow = {
   id: string;
   name: string | null;
-  created_by?: string | null;
-  created_at?: string | null;
 };
 
 type UserCompanyJoinRow = {
@@ -48,24 +45,29 @@ export function writeActiveCompanyCookie(companyId: string | null) {
   document.cookie = `${ACTIVE_COMPANY_COOKIE}=${encodeURIComponent(companyId)}; Path=/; Max-Age=2592000; SameSite=Lax`;
 }
 
-export function pickActiveCompanyId(companies: SessionCompany[], preferredCompanyId?: string | null) {
+export function pickActiveCompanyId(
+  companies: SessionCompany[],
+  role: SessionRole,
+  preferredCompanyId?: string | null,
+  fallbackCompanyId?: string | null
+) {
   if (preferredCompanyId && companies.some((company) => company.id === preferredCompanyId)) {
     return preferredCompanyId;
+  }
+
+  if (role === "god") {
+    return null;
+  }
+
+  if (fallbackCompanyId && companies.some((company) => company.id === fallbackCompanyId)) {
+    return fallbackCompanyId;
   }
 
   return companies[0]?.id ?? null;
 }
 
-export function isLegacyCompanyId(companyId: string | null | undefined) {
-  return companyId === LEGACY_COMPANY_ID;
-}
-
 export function getScopedCompanyId(companyId: string | null | undefined) {
-  if (!companyId || isLegacyCompanyId(companyId)) {
-    return null;
-  }
-
-  return companyId;
+  return companyId ?? null;
 }
 
 export function getCompanyName(companies: SessionCompany[] | undefined, companyId: string | null | undefined) {
@@ -85,32 +87,16 @@ export function applyCompanyFilter<TQuery extends { eq: (column: string, value: 
   return query.eq("company_id", scopedCompanyId);
 }
 
-function isMissingTenantInfrastructure(message: string) {
-  const normalized = message.toLowerCase();
-  return (
-    normalized.includes("companies") ||
-    normalized.includes("user_companies") ||
-    normalized.includes("company_id") ||
-    normalized.includes("relationship") ||
-    normalized.includes("schema cache")
-  );
-}
-
 export async function loadAccessibleCompanies(userId: string, role: string | null | undefined) {
   if (!userId) return [];
 
   if (role === "god") {
     const { data, error } = await supabase.from("companies").select("id, name").order("name", { ascending: true });
-    if (error) {
-      if (isMissingTenantInfrastructure(error.message)) {
-        return [{ id: LEGACY_COMPANY_ID, name: "Vista global", role: "god" }];
-      }
-      return [];
-    }
+    if (error) return [];
 
     return ((data ?? []) as CompanyRow[]).map((company) => ({
       id: company.id,
-      name: company.name ?? "Sin nombre",
+      name: company.name ?? "Sample 1",
       role: "god"
     }));
   }
@@ -121,12 +107,7 @@ export async function loadAccessibleCompanies(userId: string, role: string | nul
     .eq("user_id", userId)
     .order("created_at", { ascending: true });
 
-  if (error) {
-    if (isMissingTenantInfrastructure(error.message)) {
-      return [{ id: LEGACY_COMPANY_ID, name: "Vista global", role: role ?? "admin" }];
-    }
-    return [];
-  }
+  if (error) return [];
 
   return ((data ?? []) as UserCompanyJoinRow[])
     .map((row) => {
@@ -135,9 +116,23 @@ export async function loadAccessibleCompanies(userId: string, role: string | nul
 
       return {
         id: company.id,
-        name: company.name ?? "Sin nombre",
+        name: company.name ?? "Sample 1",
         role: row.role ?? "viewer"
       };
     })
     .filter((company): company is SessionCompany => Boolean(company));
+}
+
+export async function loadFirstAssignedCompanyId(userId: string) {
+  if (!userId) return null;
+
+  const { data, error } = await supabase
+    .from("user_companies")
+    .select("company_id")
+    .eq("user_id", userId)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) return null;
+  return (data?.company_id as string | null | undefined) ?? null;
 }
