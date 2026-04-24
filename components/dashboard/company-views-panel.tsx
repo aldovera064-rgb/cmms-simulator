@@ -2,7 +2,9 @@
 
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
+import { isGod, isReadOnlyRole } from "@/lib/rbac";
 import { useSession } from "@/lib/session/context";
+import { supabase } from "@/lib/supabase";
 
 export function CompanyViewsPanel() {
   const { user, setActiveCompanyId } = useSession();
@@ -12,6 +14,19 @@ export function CompanyViewsPanel() {
   if (companies.length === 0) {
     return null;
   }
+
+  // Viewers should not see company switcher
+  if (isReadOnlyRole(user?.role)) {
+    return null;
+  }
+
+  const handleDeleteCompany = async (companyId: string) => {
+    if (!isGod(user?.role)) return;
+    if (!confirm("¿Eliminar esta empresa y todas sus asignaciones?")) return;
+    await supabase.from("user_companies").delete().eq("company_id", companyId);
+    await supabase.from("companies").delete().eq("id", companyId);
+    window.location.reload();
+  };
 
   return (
     <Panel className="p-6 border-[#d6d0b8] bg-[#f8f6ea]">
@@ -36,13 +51,20 @@ export function CompanyViewsPanel() {
                   <td className="px-4 py-2">{company.name}</td>
                   <td className="px-4 py-2">{company.role}</td>
                   <td className="px-4 py-2 text-right">
-                    {company.id === activeCompanyId ? (
-                      <span className="text-xs text-muted">Activa</span>
-                    ) : (
-                      <Button variant="secondary" onClick={() => setActiveCompanyId(company.id)}>
-                        Entrar
-                      </Button>
-                    )}
+                    <div className="flex justify-end gap-2">
+                      {company.id === activeCompanyId ? (
+                        <span className="text-xs text-muted">Activa</span>
+                      ) : (
+                        <Button variant="secondary" onClick={() => setActiveCompanyId(company.id)}>
+                          Entrar
+                        </Button>
+                      )}
+                      {isGod(user?.role) && company.id !== activeCompanyId ? (
+                        <Button variant="danger" onClick={() => void handleDeleteCompany(company.id)}>
+                          Eliminar
+                        </Button>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               ))}

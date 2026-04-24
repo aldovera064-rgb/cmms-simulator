@@ -28,7 +28,16 @@ const emptyValues: AssetFormValues = {
   model: "",
   serialNumber: "",
   installationDate: "",
-  technicalSpecifications: ""
+  technicalSpecifications: "",
+  temperature: 0,
+  vibration: 0,
+  currentVal: 0,
+  pressure: 0,
+  alertThreshold: 50,
+  cbmEnabled: false,
+  severity: 1,
+  occurrence: 1,
+  detection: 1
 };
 
 export function AssetFormModal({
@@ -56,7 +65,16 @@ export function AssetFormModal({
       model: asset.model,
       serialNumber: asset.serialNumber,
       installationDate: asset.installationDate.slice(0, 10),
-      technicalSpecifications: asset.technicalSpecifications
+      technicalSpecifications: asset.technicalSpecifications,
+      temperature: asset.temperature ?? 0,
+      vibration: asset.vibration ?? 0,
+      currentVal: asset.currentVal ?? 0,
+      pressure: asset.pressure ?? 0,
+      alertThreshold: asset.alertThreshold ?? 50,
+      cbmEnabled: asset.cbmEnabled ?? false,
+      severity: asset.severity ?? 1,
+      occurrence: asset.occurrence ?? 1,
+      detection: asset.detection ?? 1
     });
   }, [asset, open]);
 
@@ -173,6 +191,78 @@ export function AssetFormModal({
             value={values.technicalSpecifications}
           />
         </Field>
+
+        <div className="space-y-4 rounded-2xl border border-border bg-panelAlt/50 p-4">
+          <p className="text-xs uppercase tracking-[0.2em] text-accent">Condition Based Monitoring (CBM)</p>
+          <div className="grid gap-4 md:grid-cols-2">
+            <label className="flex items-center gap-2 text-sm text-foreground">
+              <input
+                type="checkbox"
+                checked={values.cbmEnabled}
+                onChange={(e) => setValues((v) => ({ ...v, cbmEnabled: e.target.checked }))}
+                className="rounded border-border text-accent focus:ring-accent"
+              />
+              Habilitar monitoreo basado en condición
+            </label>
+            <div className="md:col-span-1" />
+            <Field label="Temperatura (°C)">
+              <Input
+                type="number" step="0.1"
+                onChange={(e) => setValues((v) => ({ ...v, temperature: Number(e.target.value) }))}
+                value={values.temperature ?? 0}
+              />
+            </Field>
+            <Field label="Umbral de alerta (°C)">
+              <Input
+                type="number" step="0.1"
+                onChange={(e) => setValues((v) => ({ ...v, alertThreshold: Number(e.target.value) }))}
+                value={values.alertThreshold ?? 50}
+              />
+            </Field>
+            <Field label="Vibración (mm/s)">
+              <Input
+                type="number" step="0.01"
+                onChange={(e) => setValues((v) => ({ ...v, vibration: Number(e.target.value) }))}
+                value={values.vibration ?? 0}
+              />
+            </Field>
+            <Field label="Presión (psi)">
+              <Input
+                type="number" step="0.1"
+                onChange={(e) => setValues((v) => ({ ...v, pressure: Number(e.target.value) }))}
+                value={values.pressure ?? 0}
+              />
+            </Field>
+          </div>
+        </div>
+
+        <div className="space-y-4 rounded-2xl border border-border bg-panelAlt/50 p-4">
+          <p className="text-xs uppercase tracking-[0.2em] text-accent">Análisis de Riesgo (NPR)</p>
+          <p className="text-xs text-muted">Valores del 1 al 10 (NPR = Severidad × Ocurrencia × Detección)</p>
+          <div className="grid gap-4 md:grid-cols-3">
+            <Field label="Severidad">
+              <Input
+                type="number" min="1" max="10"
+                onChange={(e) => setValues((v) => ({ ...v, severity: Number(e.target.value) }))}
+                value={values.severity ?? 1}
+              />
+            </Field>
+            <Field label="Ocurrencia">
+              <Input
+                type="number" min="1" max="10"
+                onChange={(e) => setValues((v) => ({ ...v, occurrence: Number(e.target.value) }))}
+                value={values.occurrence ?? 1}
+              />
+            </Field>
+            <Field label="Detección">
+              <Input
+                type="number" min="1" max="10"
+                onChange={(e) => setValues((v) => ({ ...v, detection: Number(e.target.value) }))}
+                value={values.detection ?? 1}
+              />
+            </Field>
+          </div>
+        </div>
 
         {error ? <p className="text-sm text-danger">{error}</p> : null}
 

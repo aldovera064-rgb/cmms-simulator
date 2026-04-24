@@ -12,6 +12,17 @@ export type AssetListItem = {
   startTime?: number;
   lastFailureAt: string | null;
   technicalSpecifications: string;
+  // CBM
+  temperature: number | null;
+  vibration: number | null;
+  currentVal: number | null;
+  pressure: number | null;
+  alertThreshold: number | null;
+  cbmEnabled: boolean;
+  // NPR
+  severity: number;
+  occurrence: number;
+  detection: number;
 };
 
 export type AssetFormValues = {
@@ -24,6 +35,17 @@ export type AssetFormValues = {
   serialNumber: string;
   installationDate: string;
   technicalSpecifications: string;
+  // CBM
+  temperature?: number;
+  vibration?: number;
+  currentVal?: number;
+  pressure?: number;
+  alertThreshold?: number;
+  cbmEnabled?: boolean;
+  // NPR
+  severity?: number;
+  occurrence?: number;
+  detection?: number;
 };
 
 export type AssetStatus = AssetListItem["status"];

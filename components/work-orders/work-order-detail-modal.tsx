@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Modal } from "@/components/ui/modal";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { IshikawaModal } from "@/components/work-orders/ishikawa-modal";
 import { WorkOrderPriorityBadge } from "@/components/work-orders/work-order-priority-badge";
 import { WorkOrderStatusBadge } from "@/components/work-orders/work-order-status-badge";
 import { WorkOrderApiError, WorkOrderListItem, WorkOrderUpdateInput } from "@/types/work-orders";
@@ -39,6 +40,7 @@ export function WorkOrderDetailModal({
   const [workPerformed, setWorkPerformed] = useState("");
   const [rootCause, setRootCause] = useState("");
   const [repairTimeMinutes, setRepairTimeMinutes] = useState("");
+  const [ishikawaOpen, setIshikawaOpen] = useState(false);
 
   useEffect(() => {
     setTechnicianName(workOrder?.technicianName ?? "");
@@ -191,7 +193,10 @@ export function WorkOrderDetailModal({
               </label>
             </div>
 
-            <div className="flex justify-end">
+            <div className="flex justify-between">
+              <Button variant="secondary" onClick={() => setIshikawaOpen(true)}>
+                🐟 Análisis causa raíz (Ishikawa)
+              </Button>
               <Button
                 disabled={loading}
                 onClick={() =>
@@ -214,6 +219,12 @@ export function WorkOrderDetailModal({
 
         {error ? <p className="text-sm text-danger">{error}</p> : null}
       </div>
+
+      <IshikawaModal
+        open={ishikawaOpen}
+        onClose={() => setIshikawaOpen(false)}
+        onSave={(result) => setRootCause(result)}
+      />
     </Modal>
   );
 }

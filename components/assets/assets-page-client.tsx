@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
@@ -27,6 +27,15 @@ function mapAsset(row: {
   status: string | null;
   start_time: number | null;
   created_at: string | null;
+  temperature?: number | null;
+  vibration?: number | null;
+  current_val?: number | null;
+  pressure?: number | null;
+  alert_threshold?: number | null;
+  cbm_enabled?: boolean | null;
+  severity?: number | null;
+  occurrence?: number | null;
+  detection?: number | null;
 }): AssetListItem {
   return {
     id: row.id,
@@ -41,7 +50,16 @@ function mapAsset(row: {
     installationDate: row.created_at ?? new Date().toISOString(),
     startTime: row.start_time ?? Date.now(),
     lastFailureAt: null,
-    technicalSpecifications: ""
+    technicalSpecifications: "",
+    temperature: row.temperature ?? null,
+    vibration: row.vibration ?? null,
+    currentVal: row.current_val ?? null,
+    pressure: row.pressure ?? null,
+    alertThreshold: row.alert_threshold ?? null,
+    cbmEnabled: row.cbm_enabled ?? false,
+    severity: row.severity ?? 1,
+    occurrence: row.occurrence ?? 1,
+    detection: row.detection ?? 1
   };
 }
 
@@ -73,6 +91,9 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
           name: "Name",
           area: "Area",
           runtime: "Runtime",
+          temp: "Temp",
+          vib: "Vib",
+          npr: "NPR",
           criticality: "Criticality",
           actions: "Actions",
           edit: "Edit",
@@ -90,6 +111,9 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
           name: "Nombre",
           area: "Área",
           runtime: "Runtime",
+          temp: "Temp",
+          vib: "Vib",
+          npr: "NPR",
           criticality: "Criticidad",
           actions: "Acciones",
           edit: "Editar",
@@ -167,7 +191,16 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
             area: values.area || "Producción",
             status: "OPERATIVE",
             start_time: editingAsset?.startTime ?? Date.now(),
-            company_id: companyIdForWrite
+            company_id: companyIdForWrite,
+            temperature: values.temperature,
+            vibration: values.vibration,
+            current_val: values.currentVal,
+            pressure: values.pressure,
+            alert_threshold: values.alertThreshold,
+            cbm_enabled: values.cbmEnabled,
+            severity: values.severity,
+            occurrence: values.occurrence,
+            detection: values.detection
           })
           .eq("id", editingAsset!.id)
           .eq("company_id", activeCompanyId);
@@ -180,7 +213,16 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
             area: values.area || "Producción",
             status: "OPERATIVE",
             start_time: Date.now(),
-            company_id: companyIdForWrite
+            company_id: companyIdForWrite,
+            temperature: values.temperature,
+            vibration: values.vibration,
+            current_val: values.currentVal,
+            pressure: values.pressure,
+            alert_threshold: values.alertThreshold,
+            cbm_enabled: values.cbmEnabled,
+            severity: values.severity,
+            occurrence: values.occurrence,
+            detection: values.detection
           }
         ]);
 
@@ -241,41 +283,59 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
                 <th className="px-4 py-2 text-left align-middle">{copy.name}</th>
                 <th className="px-4 py-2 text-left align-middle">{copy.area}</th>
                 <th className="px-4 py-2 text-left align-middle">{copy.runtime}</th>
+                <th className="px-4 py-2 text-left align-middle">{copy.temp}</th>
+                <th className="px-4 py-2 text-left align-middle">{copy.vib}</th>
+                <th className="px-4 py-2 text-left align-middle">{copy.npr}</th>
                 <th className="px-4 py-2 text-left align-middle">{copy.criticality}</th>
                 <th className="px-4 py-2 text-right align-middle">{copy.actions}</th>
               </tr>
             </thead>
 
             <tbody className="divide-y divide-border">
-              {assetsWithRuntime.map((asset) => (
-                <tr key={asset.id}>
-                  <td className="px-4 py-2 text-left align-middle">
-                    <Link href={`/activos/${asset.id}`}>{asset.tag}</Link>
-                  </td>
-                  <td className="px-4 py-2 text-left align-middle">{asset.name}</td>
-                  <td className="px-4 py-2 text-left align-middle">{asset.area}</td>
-                  <td className="px-4 py-2 text-left align-middle">{asset.runtimeHours.toFixed(1)} h</td>
-                  <td className="px-4 py-2 text-left align-middle">
-                    <CriticalityBadge value={asset.criticality} />
-                  </td>
-                  <td className="px-4 py-2 text-right align-middle">
-                    {readOnly ? (
-                      <span className="text-xs text-muted">Read only</span>
-                    ) : (
-                      <div className="flex justify-end gap-2">
-                        <Button onClick={() => openEditModal(asset)}>{copy.edit}</Button>
-                        <Button variant="danger" onClick={() => setDeleteTarget(asset)}>
-                          {copy.remove}
-                        </Button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {assetsWithRuntime.map((asset) => {
+                const npr = asset.severity * asset.occurrence * asset.detection;
+                const statusColor =
+                  asset.status === "OPERATIVE" ? "bg-green-500" : asset.status === "MAINTENANCE" ? "bg-yellow-500" : "bg-red-500";
+                const nprColor = npr >= 200 ? "bg-danger text-white" : npr >= 100 ? "bg-warning text-white" : "bg-success text-white";
+
+                return (
+                  <tr key={asset.id}>
+                    <td className="px-4 py-2 text-left align-middle">
+                      <Link href={`/activos/${asset.id}`}>{asset.tag}</Link>
+                    </td>
+                    <td className="px-4 py-2 text-left align-middle flex items-center gap-2">
+                      <span className={`w-2.5 h-2.5 rounded-full ${statusColor}`}></span>
+                      {asset.name}
+                    </td>
+                    <td className="px-4 py-2 text-left align-middle">{asset.area}</td>
+                    <td className="px-4 py-2 text-left align-middle">{asset.runtimeHours.toFixed(1)} h</td>
+                    <td className="px-4 py-2 text-left align-middle">{asset.temperature ?? "-"}</td>
+                    <td className="px-4 py-2 text-left align-middle">{asset.vibration ?? "-"}</td>
+                    <td className="px-4 py-2 text-left align-middle">
+                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${nprColor}`}>{npr}</span>
+                    </td>
+                    <td className="px-4 py-2 text-left align-middle">
+                      <CriticalityBadge value={asset.criticality} />
+                    </td>
+                    <td className="px-4 py-2 text-right align-middle">
+                      {readOnly ? (
+                        <span className="text-xs text-muted">Read only</span>
+                      ) : (
+                        <div className="flex justify-end gap-2">
+                          <Button onClick={() => openEditModal(asset)}>{copy.edit}</Button>
+                          <Button variant="danger" onClick={() => setDeleteTarget(asset)}>
+                            {copy.remove}
+                          </Button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
 
               {assetsWithRuntime.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="text-center py-6">
+                  <td colSpan={10} className="text-center py-6">
                     {copy.empty}
                   </td>
                 </tr>

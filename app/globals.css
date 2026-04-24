@@ -1,4 +1,4 @@
-﻿@tailwind base;
+@tailwind base;
 @tailwind components;
 @tailwind utilities;
 
@@ -60,5 +60,15 @@
       linear-gradient(to bottom, rgba(85, 107, 47, 0.08) 1px, transparent 1px),
       radial-gradient(circle at top right, rgba(194, 161, 77, 0.22), transparent 40%);
     background-size: 28px 28px, 28px 28px, 100% 100%;
+  }
+}
+
+@layer utilities {
+  @keyframes pulse-danger {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+  }
+  .animate-pulse-danger {
+    animation: pulse-danger 2s ease-in-out infinite;
   }
 }

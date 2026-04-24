@@ -35,6 +35,9 @@ export function ManageUsersPanel() {
   const [loading, setLoading] = useState(false);
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editingUsername, setEditingUsername] = useState("");
+  const [existingUsername, setExistingUsername] = useState("");
+  const [addExistingLoading, setAddExistingLoading] = useState(false);
+  const [addExistingMessage, setAddExistingMessage] = useState("");
   const canAccessPanel = canEditModule(user?.role, "manage_users");
 
   async function loadUsers() {
@@ -175,9 +178,64 @@ export function ManageUsersPanel() {
     if (!canDeleteRole(actorRole, target.role)) return;
     if (target.username === user?.name) return;
 
-    await supabase.from("user_companies").delete().eq("user_id", target.id);
-    await supabase.from("admins").delete().eq("id", target.id);
+    if (actorRole === "god") {
+      // God: full delete (remove from all companies + delete user)
+      await supabase.from("user_companies").delete().eq("user_id", target.id);
+      await supabase.from("admins").delete().eq("id", target.id);
+    } else {
+      // Admin: remove from current company only
+      await supabase.from("user_companies").delete().eq("user_id", target.id).eq("company_id", activeCompanyId);
+    }
     await loadUsers();
+  };
+
+  const handleAddExistingUser = async () => {
+    if (!activeCompanyId) return;
+    const normalized = normalizeUsername(existingUsername);
+    if (!normalized) return;
+
+    setAddExistingLoading(true);
+    setAddExistingMessage("");
+
+    // Find user in admins
+    const { data: found } = await supabase
+      .from("admins")
+      .select("id, username")
+      .eq("username", normalized)
+      .maybeSingle();
+
+    if (!found) {
+      setAddExistingMessage("Usuario no encontrado.");
+      setAddExistingLoading(false);
+      return;
+    }
+
+    // Check if already in company
+    const { data: existing } = await supabase
+      .from("user_companies")
+      .select("id")
+      .eq("user_id", found.id)
+      .eq("company_id", activeCompanyId)
+      .maybeSingle();
+
+    if (existing) {
+      setAddExistingMessage("El usuario ya pertenece a esta empresa.");
+      setAddExistingLoading(false);
+      return;
+    }
+
+    const { error } = await supabase
+      .from("user_companies")
+      .insert({ user_id: found.id, company_id: activeCompanyId, role: "viewer" });
+
+    if (error) {
+      setAddExistingMessage("Error: " + error.message);
+    } else {
+      setAddExistingMessage("Usuario agregado correctamente.");
+      setExistingUsername("");
+      await loadUsers();
+    }
+    setAddExistingLoading(false);
   };
 
   if (!canAccessPanel) return null;
@@ -221,6 +279,22 @@ export function ManageUsersPanel() {
             Create
           </Button>
         </form>
+
+        <div className="grid gap-3 md:grid-cols-[1fr_auto] items-end">
+          <div className="space-y-1">
+            <label className="text-xs text-muted">Agregar usuario existente a esta empresa</label>
+            <input
+              className="w-full rounded-2xl border border-border bg-panelAlt px-3 py-2 text-sm"
+              placeholder="username existente"
+              value={existingUsername}
+              onChange={(event) => { setExistingUsername(event.target.value); setAddExistingMessage(""); }}
+            />
+          </div>
+          <Button type="button" disabled={addExistingLoading || !existingUsername.trim()} onClick={() => void handleAddExistingUser()}>
+            {addExistingLoading ? "..." : "Agregar a empresa"}
+          </Button>
+        </div>
+        {addExistingMessage ? <p className="text-xs text-muted">{addExistingMessage}</p> : null}
 
         <div className="w-full overflow-x-auto">
           <table className="table-auto w-full border-collapse divide-y divide-border text-sm">
@@ -284,7 +358,7 @@ export function ManageUsersPanel() {
                         ) : null}
                         {canMutateRole ? (
                           <Button variant="danger" onClick={() => void handleDelete(entry)}>
-                            Delete
+                            {actorRole === "god" ? "Eliminar" : "Quitar de empresa"}
                           </Button>
                         ) : (
                           <span className="text-xs text-muted">Locked</span>

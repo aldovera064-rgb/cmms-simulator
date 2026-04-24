@@ -12,6 +12,17 @@ export type AssetRow = {
   location: string | null;
   created_at: string | null;
   company_id?: string | null;
+  // CBM fields
+  temperature: number | null;
+  vibration: number | null;
+  current_val: number | null;
+  pressure: number | null;
+  alert_threshold: number | null;
+  cbm_enabled: boolean | null;
+  // NPR fields
+  severity: number | null;
+  occurrence: number | null;
+  detection: number | null;
 };
 
 export type WorkOrderRow = {

@@ -34,7 +34,16 @@ function normalizeAsset(asset: {
     serialNumber: asset.serialNumber,
     installationDate: asset.installationDate.toISOString(),
     lastFailureAt: asset.lastFailureAt?.toISOString() ?? null,
-    technicalSpecifications: asset.technicalSpecifications
+    technicalSpecifications: asset.technicalSpecifications,
+    temperature: null,
+    vibration: null,
+    currentVal: null,
+    pressure: null,
+    alertThreshold: null,
+    cbmEnabled: false,
+    severity: 1,
+    occurrence: 1,
+    detection: 1
   };
 }
 

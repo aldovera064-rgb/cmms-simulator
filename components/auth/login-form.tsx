@@ -253,29 +253,60 @@ export function LoginForm() {
 
       console.log("✅ STEP 2 DONE — COMPANY:", company.id);
 
-      // ── STEP 3: INSERT USER_COMPANIES (NO CONDITIONS) ──
+      // ── STEP 3: INSERT USER_COMPANIES (NO CONDITIONS, WITH RETRY) ──
       console.log("── STEP 3: INSERTING USER_COMPANIES ──");
       console.log("USER ID:", created.id);
       console.log("COMPANY ID:", company.id);
 
-      const { data: relationData, error: relationError } = await supabase
+      const insertPayload = {
+        user_id: created.id,
+        company_id: company.id,
+        role: "admin"
+      };
+
+      let { data: relationData, error: relationError } = await supabase
         .from("user_companies")
-        .insert({
-          user_id: created.id,
-          company_id: company.id,
-          role: "admin"
-        })
+        .insert(insertPayload)
         .select();
 
       console.log("USER_COMPANIES RESULT:", relationData);
 
+      // Retry once if first attempt fails (e.g., transient RLS issue)
       if (relationError) {
-        console.error("USER_COMPANIES INSERT ERROR:", relationError);
+        console.warn("USER_COMPANIES INSERT FAILED, retrying in 500ms...", relationError);
+        await new Promise((r) => setTimeout(r, 500));
+
+        const retry = await supabase
+          .from("user_companies")
+          .insert(insertPayload)
+          .select();
+
+        relationData = retry.data;
+        relationError = retry.error;
+        console.log("USER_COMPANIES RETRY RESULT:", relationData, relationError);
+      }
+
+      if (relationError) {
+        console.error("USER_COMPANIES INSERT ERROR (after retry):", relationError);
         alert("Error linking user to company: " + relationError.message);
         return;
       }
 
-      console.log("✅ STEP 3 DONE — USER LINKED TO COMPANY");
+      // Verify the row actually exists
+      const { data: verifyRow } = await supabase
+        .from("user_companies")
+        .select("id")
+        .eq("user_id", created.id)
+        .eq("company_id", company.id)
+        .maybeSingle();
+
+      if (!verifyRow) {
+        console.error("VERIFICATION FAILED — row not found after insert");
+        alert("Error: user-company link could not be verified");
+        return;
+      }
+
+      console.log("✅ STEP 3 DONE — USER LINKED TO COMPANY (verified)");
 
       // ── STEP 4: SET ROLE TO ADMIN ──
       await supabase.from("admins").update({ role: "admin" }).eq("id", created.id);

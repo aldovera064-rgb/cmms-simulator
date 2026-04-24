@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -19,6 +19,7 @@ import { ManageUsersPanel } from "@/components/dashboard/manage-users-panel";
 import { DashboardSummary } from "@/components/dashboard/dashboard-summary";
 import { CompanyViewsPanel } from "@/components/dashboard/company-views-panel";
 import { Panel } from "@/components/ui/panel";
+import { runCbmCheck } from "@/lib/cbm-check";
 import { ensureSeedData, fetchAssets, fetchTechnicians, fetchWorkOrders } from "@/lib/cmms-data";
 import { useI18n } from "@/lib/i18n/context";
 import { canManageUsers, isGod } from "@/lib/rbac";
@@ -84,6 +85,9 @@ export function DashboardPageContent({ metrics }: DashboardPageContentProps) {
         fetchWorkOrders(activeCompanyId),
         fetchTechnicians(activeCompanyId)
       ]);
+
+      // Run CBM threshold checks and auto-create predictive WOs
+      await runCbmCheck(activeCompanyId);
 
       setAssets(assetRows);
       setWorkOrders(workOrderRows);
@@ -177,12 +181,33 @@ export function DashboardPageContent({ metrics }: DashboardPageContentProps) {
       return age > 7 * 24 * 3600000;
     }).length;
 
+    // OEE = Availability × Performance × Quality
+    const totalWos = workOrders.length;
+    const closedCount = closedOrders.length;
+    const correctiveCount = failures;
+    const performance = totalWos > 0 ? (closedCount / totalWos) * 100 : 100;
+    const quality = totalWos > 0 ? (1 - correctiveCount / totalWos) * 100 : 100;
+    const oee = (availability / 100) * (performance / 100) * (quality / 100) * 100;
+
+    // Backlog = open + in_progress + on_hold
+    const backlog = workOrders.filter((o) => o.status !== "CLOSED").length;
+
+    // PM Compliance = completed PM / total PM × 100
+    const pmTotal = workOrders.filter((o) => o.type === "PREVENTIVE").length;
+    const pmClosed = workOrders.filter((o) => o.type === "PREVENTIVE" && o.status === "CLOSED").length;
+    const pmCompliance = pmTotal > 0 ? (pmClosed / pmTotal) * 100 : 100;
+
     return {
       availability,
       mttrHours,
       mtbf,
       overdue,
-      technicians: techniciansCount
+      technicians: techniciansCount,
+      oee,
+      performance,
+      quality,
+      backlog,
+      pmCompliance
     };
   }, [assets, techniciansCount, workOrders]);
 
@@ -206,6 +231,43 @@ export function DashboardPageContent({ metrics }: DashboardPageContentProps) {
         <Panel className="p-5 border-[#d6d0b8] bg-[#f8f6ea]">
           <p className="text-sm text-muted">{dictionary.dashboard.mtbf}</p>
           <p className="mt-4 text-3xl font-semibold tracking-tight">{kpis.mtbf.toFixed(1)} h</p>
+        </Panel>
+        <Panel className="p-5 border-[#d6d0b8] bg-[#f8f6ea]">
+          <p className="text-sm text-muted">{dictionary.dashboard.overdueWorkOrders}</p>
+          <p className="mt-4 text-3xl font-semibold tracking-tight">{kpis.overdue}</p>
+        </Panel>
+      </div>
+
+      {/* OEE + new KPI cards */}
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <Panel className="p-5 border-[#d6d0b8] bg-[#f8f6ea] flex flex-col items-center">
+          <p className="text-sm text-muted mb-3">OEE</p>
+          <svg width="120" height="120" viewBox="0 0 120 120">
+            <circle cx="60" cy="60" r="50" fill="none" stroke="#d6d0b8" strokeWidth="10" />
+            <circle
+              cx="60" cy="60" r="50" fill="none"
+              stroke={kpis.oee >= 70 ? "#6B8E23" : kpis.oee >= 40 ? "#C2A14D" : "#9f3a2f"}
+              strokeWidth="10"
+              strokeDasharray={`${(kpis.oee / 100) * 314} 314`}
+              strokeLinecap="round"
+              transform="rotate(-90 60 60)"
+              className="transition-all duration-700"
+            />
+            <text x="60" y="65" textAnchor="middle" className="text-xl font-bold fill-foreground">
+              {kpis.oee.toFixed(0)}%
+            </text>
+          </svg>
+          <p className="mt-2 text-xs text-muted">A:{kpis.availability.toFixed(0)}% P:{kpis.performance.toFixed(0)}% Q:{kpis.quality.toFixed(0)}%</p>
+        </Panel>
+        <Panel className="p-5 border-[#d6d0b8] bg-[#f8f6ea]">
+          <p className="text-sm text-muted">Backlog</p>
+          <p className="mt-4 text-3xl font-semibold tracking-tight">{kpis.backlog}</p>
+          <p className="mt-1 text-xs text-muted">OTs abiertas</p>
+        </Panel>
+        <Panel className="p-5 border-[#d6d0b8] bg-[#f8f6ea]">
+          <p className="text-sm text-muted">PM Compliance</p>
+          <p className="mt-4 text-3xl font-semibold tracking-tight">{kpis.pmCompliance.toFixed(0)}%</p>
+          <p className="mt-1 text-xs text-muted">Preventivos completados</p>
         </Panel>
         <Panel className="p-5 border-[#d6d0b8] bg-[#f8f6ea]">
           <p className="text-sm text-muted">{dictionary.dashboard.overdueWorkOrders}</p>
