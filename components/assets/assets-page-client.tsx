@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CriticalityBadge } from "@/components/ui/criticality-badge";
 import { Panel } from "@/components/ui/panel";
-import { getScopedCompanyId } from "@/lib/company";
 import { ensureSeedData, fetchAssets } from "@/lib/cmms-data";
 import { useI18n } from "@/lib/i18n/context";
 import { canEditModule, isReadOnlyRole } from "@/lib/rbac";
@@ -67,7 +66,6 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
   const { locale } = useI18n();
   const { user } = useSession();
   const activeCompanyId = user?.activeCompanyId ?? null;
-  const companyIdForWrite = getScopedCompanyId(activeCompanyId);
   const [assets, setAssets] = useState<AssetListItem[]>(initialAssets);
   const [editingAsset, setEditingAsset] = useState<AssetListItem | null>(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -181,59 +179,62 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
     setFormError("");
 
     try {
+      console.log("COMPANY ID:", activeCompanyId);
+      const { data: companyRow, error: companyLookupError } = await supabase
+        .from("companies")
+        .select("id")
+        .eq("id", activeCompanyId)
+        .maybeSingle();
+      console.log("COMPANY EXISTS:", Boolean(companyRow));
+      if (companyLookupError) {
+        console.error("COMPANY LOOKUP ERROR:", companyLookupError);
+      }
+
       const isEditing = Boolean(editingAsset);
 
-      if (isEditing) {
-        const updatePayload = {
-          name: values.name || values.tag,
-          description: values.description ?? "",
-          severity: values.severity ?? 1,
-          occurrence: values.occurrence ?? 1,
-          detection: values.detection ?? 1,
-          temperature: values.temperature ?? null,
-          vibration: values.vibration ?? null,
-          pressure: values.pressure ?? null,
-          current_val: values.currentVal ?? null, // using current_val as that is DB column
-          alert_threshold: values.alertThreshold ?? null,
-          cbm_enabled: values.cbmEnabled ?? false
-          // ❌ NO incluir company_id
-        };
+      const payload = {
+        tag: values.tag,
+        name: values.name || "",
+        area: values.area || "",
+        criticality: values.criticality || "B",
+        status: "OPERATIVE",
+        fabricante: values.manufacturer || "",
+        modelo: values.model || "",
+        serie: values.serialNumber || "",
+        fecha_instalacion: values.installationDate || null,
+        especificaciones: values.technicalSpecifications || "",
+        temperature: values.temperature ?? 0,
+        vibration: values.vibration ?? 0,
+        pressure: values.pressure ?? 0,
+        alert_threshold: values.alertThreshold ?? 0,
+        company_id: activeCompanyId
+      };
 
-        console.error("Asset payload:", updatePayload);
+      console.log("FINAL PAYLOAD:", payload);
+
+      if (isEditing) {
 
         const { error } = await supabase
           .from("assets")
-          .update(updatePayload)
+          .update(payload)
           .eq("id", editingAsset!.id)
           .eq("company_id", activeCompanyId);
 
         if (error) {
-          console.error("Supabase error:", error);
+          console.error("ERROR CODE:", error.code);
+          console.error("ERROR MESSAGE:", error.message);
+          console.error("ERROR DETAILS:", error.details);
           throw error;
         }
       } else {
         const { error } = await supabase.from("assets").insert([
-          {
-            name: values.name || values.tag,
-            area: values.area || "Producción",
-            status: "OPERATIVE",
-            start_time: Date.now(),
-            serial_number: values.serialNumber || null,
-            company_id: companyIdForWrite,
-            temperature: values.temperature,
-            vibration: values.vibration,
-            current_val: values.currentVal,
-            pressure: values.pressure,
-            alert_threshold: values.alertThreshold,
-            cbm_enabled: values.cbmEnabled,
-            severity: values.severity,
-            occurrence: values.occurrence,
-            detection: values.detection
-          }
+          payload
         ]);
 
         if (error) {
-          console.error("Asset insert error:", error);
+          console.error("ERROR CODE:", error.code);
+          console.error("ERROR MESSAGE:", error.message);
+          console.error("ERROR DETAILS:", error.details);
           throw error;
         }
       }
@@ -243,7 +244,7 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
       setFormOpen(false);
       setEditingAsset(null);
     } catch (err) {
-      console.error("Asset save failed:", err);
+      console.error("SUPABASE FULL ERROR:", JSON.stringify(err, null, 2));
       setFormError(locale === "en" ? "Could not save asset." : "No se pudo guardar el activo.");
     } finally {
       setSaving(false);

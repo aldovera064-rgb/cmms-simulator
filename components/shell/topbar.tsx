@@ -20,7 +20,7 @@ function getFlagSrc(country: string) {
 
 export function Topbar() {
   const router = useRouter();
-  const { dictionary, locale, setLocale } = useI18n();
+  const { dictionary } = useI18n();
   const { user, signOut, setActiveCompanyId } = useSession();
   const [cookieUser, setCookieUser] = useState("");
   const [cookieCountry, setCookieCountry] = useState("mx");
@@ -85,21 +85,6 @@ export function Topbar() {
             </select>
           </label>
         ) : null}
-
-        <div className="rounded-2xl border border-border bg-panelAlt/80 p-1">
-          {(["es", "en"] as const).map((value) => (
-            <button
-              className={`rounded-xl px-3 py-2 text-sm transition ${
-                locale === value ? "bg-accent text-slate-950" : "text-muted"
-              }`}
-              key={value}
-              onClick={() => setLocale(value)}
-              type="button"
-            >
-              {value.toUpperCase()}
-            </button>
-          ))}
-        </div>
 
         <div className="rounded-2xl border border-border bg-panelAlt/80 px-3 py-2 text-sm flex items-center gap-2">
           <img src={getFlagSrc(cookieCountry)} className="w-5 h-5 object-cover" alt={cookieCountry} />

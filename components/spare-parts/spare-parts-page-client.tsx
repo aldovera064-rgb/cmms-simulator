@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
@@ -11,7 +11,12 @@ import { canEditModule } from "@/lib/rbac";
 import { useSession } from "@/lib/session/context";
 import { supabase } from "@/lib/supabase";
 
-const UNIT_OPTIONS = ["piezas", "kg", "L", "m", "unidades", "galones", "cajas"] as const;
+const UNIT_GROUPS = {
+  mass: ["kg", "g", "lb"],
+  volume: ["L", "ml", "gal"],
+  length: ["m", "cm", "ft", "in"],
+  count: ["piezas", "units"]
+} as const;
 
 type SparePart = {
   id: string;
@@ -46,12 +51,19 @@ export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClient
   const [name, setName] = useState("");
   const [stock, setStock] = useState("");
   const [minStock, setMinStock] = useState("");
-  const [unit, setUnit] = useState("piezas");
+  const getStoredUnit = () => (typeof window !== "undefined" ? localStorage.getItem("cmms_default_unit") : null);
+  const defaultUnit = getStoredUnit();
+  const [unit, setUnit] = useState(defaultUnit || "piezas");
+  const [unitCategory, setUnitCategory] = useState<keyof typeof UNIT_GROUPS>("count");
   const [location, setLocation] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const canMutate = canEditModule(user?.role, "spare_parts");
   const readOnly = !canMutate;
+
+  const units = useMemo(() => {
+    return UNIT_GROUPS[unitCategory] ?? UNIT_GROUPS.count;
+  }, [unitCategory]);
 
   const copy =
     locale === "en"
@@ -65,6 +77,7 @@ export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClient
           name: "Name",
           stock: "Stock",
           minStock: "Min stock",
+          unitCategory: "Unit Category",
           unit: "Unit",
           location: "Location",
           actions: "Actions",
@@ -82,6 +95,7 @@ export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClient
           name: "Nombre",
           stock: "Stock",
           minStock: "Stock mínimo",
+          unitCategory: "Categoría",
           unit: "Unidad",
           location: "Ubicación",
           actions: "Acciones",
@@ -106,13 +120,32 @@ export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClient
   }, [activeCompanyId]);
 
   useEffect(() => {
-    setUnit(localStorage.getItem("cmms_default_unit") || "piezas");
+    const storedCategory = (localStorage.getItem("cmms_unit_category") || "count") as keyof typeof UNIT_GROUPS;
+    setUnitCategory(storedCategory in UNIT_GROUPS ? storedCategory : "count");
+
+    const updatedUnit = localStorage.getItem("cmms_default_unit") || "piezas";
+    setUnit(updatedUnit);
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === "cmms_unit_category") {
+        const nextCat = ((event.newValue || "count") as keyof typeof UNIT_GROUPS);
+        const safeCat = nextCat in UNIT_GROUPS ? nextCat : "count";
+        setUnitCategory(safeCat);
+        return;
+      }
+
+      if (event.key === "cmms_default_unit") setUnit(event.newValue || "piezas");
+    };
+
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
   }, []);
 
   const resetForm = () => {
     setName("");
     setStock("");
     setMinStock("");
+    setUnitCategory(((localStorage.getItem("cmms_unit_category") || "count") as keyof typeof UNIT_GROUPS) in UNIT_GROUPS ? ((localStorage.getItem("cmms_unit_category") || "count") as keyof typeof UNIT_GROUPS) : "count");
     setUnit(localStorage.getItem("cmms_default_unit") || "piezas");
     setLocation("");
     setEditingId(null);
@@ -204,7 +237,7 @@ export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClient
 
       {formOpen && (
         <Panel className="p-6 border-[#d6d0b8] bg-[#f8f6ea]">
-          <form className="grid gap-4 md:grid-cols-6 md:items-end" onSubmit={handleSubmit}>
+          <form className="grid gap-4 md:grid-cols-7 md:items-end" onSubmit={handleSubmit}>
             <label className="space-y-2 text-sm">
               <span className="text-muted">{copy.name}</span>
               <input
@@ -243,6 +276,25 @@ export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClient
             </label>
 
             <label className="space-y-2 text-sm">
+              <span className="text-muted">{copy.unitCategory}</span>
+              <select
+                className="w-full rounded-2xl border border-border bg-panelAlt px-3 py-2.5 text-sm outline-none focus:border-accent"
+                value={unitCategory}
+                onChange={(event) => {
+                  const cat = event.target.value as keyof typeof UNIT_GROUPS;
+                  setUnitCategory(cat);
+                  setUnit(UNIT_GROUPS[cat][0]);
+                }}
+                disabled={readOnly}
+              >
+                <option value="mass">Masa</option>
+                <option value="volume">Volumen</option>
+                <option value="length">Longitud</option>
+                <option value="count">Cantidad</option>
+              </select>
+            </label>
+
+            <label className="space-y-2 text-sm">
               <span className="text-muted">{copy.unit}</span>
               <select
                 className="w-full rounded-2xl border border-border bg-panelAlt px-3 py-2.5 text-sm outline-none focus:border-accent"
@@ -250,8 +302,10 @@ export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClient
                 onChange={(event) => setUnit(event.target.value)}
                 disabled={readOnly}
               >
-                {UNIT_OPTIONS.map((option) => (
-                  <option key={option} value={option}>{option}</option>
+                {units.map((u) => (
+                  <option key={u} value={u} className={unit === u ? "font-semibold text-accent" : ""}>
+                    {u}
+                  </option>
                 ))}
               </select>
             </label>
@@ -267,11 +321,11 @@ export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClient
               />
             </label>
 
-            <div className="flex gap-2">
-              <Button type="submit" disabled={readOnly}>
+            <div className="flex gap-3 items-center flex-wrap">
+              <Button type="submit" className="whitespace-nowrap" disabled={readOnly}>
                 {editingId ? copy.save : copy.create}
               </Button>
-              <Button type="button" variant="secondary" onClick={() => setFormOpen(false)}>
+              <Button type="button" variant="secondary" className="whitespace-nowrap" onClick={() => setFormOpen(false)}>
                 {copy.cancel}
               </Button>
             </div>

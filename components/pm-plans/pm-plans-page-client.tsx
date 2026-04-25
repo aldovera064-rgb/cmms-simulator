@@ -421,15 +421,15 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
     // Save snapshot before complete
     await savePmPlanSnapshot(plan.id, "completed", "active");
 
-    const today = new Date();
+    const today = startOfDay(new Date());
     const last_execution = today;
     const next_execution = addDays(last_execution, plan.frequency);
     
     await supabase
       .from("pm_plans")
       .update({ 
-        last_execution, 
-        next_execution 
+        last_run: toDateOnlyISO(last_execution),
+        next_run: toDateOnlyISO(next_execution)
       })
       .eq("id", plan.id)
       .eq("company_id", activeCompanyId);

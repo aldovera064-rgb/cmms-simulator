@@ -15,6 +15,9 @@
   --color-success: #6b8e23;
   --color-warning: #c2a14d;
   --color-danger: #9f3a2f;
+  --bg-primary: var(--color-background);
+  --text-primary: var(--color-foreground);
+  --accent: var(--color-accent);
 }
 
 :root.theme-dark {

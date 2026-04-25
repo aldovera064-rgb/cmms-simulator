@@ -91,12 +91,45 @@ export function AssetFormModal({
         className="max-h-[70vh] overflow-y-auto pr-2 space-y-6 bg-panelAlt/40 rounded-xl backdrop-blur-sm scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-transparent"
         onSubmit={(event) => {
           event.preventDefault();
-          onSubmit(values);
+          const form = event.currentTarget;
+          const formData = new FormData(form);
+
+          for (const pair of formData.entries()) {
+            console.log("FIELD:", pair[0], "VALUE:", pair[1]);
+          }
+
+          const raw = Object.fromEntries(formData.entries());
+          console.log("RAW PAYLOAD:", raw);
+
+          const nextValues: AssetFormValues = {
+            ...values,
+            tag: String(raw.tag ?? values.tag ?? ""),
+            name: String(raw.name ?? values.name ?? ""),
+            area: String(raw.area ?? values.area ?? ""),
+            criticality: (raw.criticality as AssetFormValues["criticality"]) ?? values.criticality,
+            manufacturer: String(raw.manufacturer ?? values.manufacturer ?? ""),
+            model: String(raw.model ?? values.model ?? ""),
+            serialNumber: String(raw.serialNumber ?? values.serialNumber ?? ""),
+            installationDate: String(raw.installationDate ?? values.installationDate ?? ""),
+            technicalSpecifications: String(raw.technicalSpecifications ?? values.technicalSpecifications ?? ""),
+            cbmEnabled: raw.cbmEnabled === "on" ? true : Boolean(values.cbmEnabled),
+            temperature: Number(raw.temperature ?? values.temperature ?? 0),
+            vibration: Number(raw.vibration ?? values.vibration ?? 0),
+            currentVal: Number(raw.currentVal ?? values.currentVal ?? 0),
+            pressure: Number(raw.pressure ?? values.pressure ?? 0),
+            alertThreshold: Number(raw.alertThreshold ?? values.alertThreshold ?? 50),
+            severity: Number(raw.severity ?? values.severity ?? 1),
+            occurrence: Number(raw.occurrence ?? values.occurrence ?? 1),
+            detection: Number(raw.detection ?? values.detection ?? 1)
+          };
+
+          onSubmit(nextValues);
         }}
       >
         <div className="grid gap-4 md:grid-cols-2">
           <Field label="TAG *">
             <Input
+              name="tag"
               onChange={(event) =>
                 setValues((current) => ({
                   ...current,
@@ -110,6 +143,7 @@ export function AssetFormModal({
           </Field>
           <Field label="Nombre">
             <Input
+              name="name"
               onChange={(event) =>
                 setValues((current) => ({ ...current, name: event.target.value }))
               }
@@ -119,6 +153,7 @@ export function AssetFormModal({
           </Field>
           <Field label="Area">
             <Input
+              name="area"
               onChange={(event) =>
                 setValues((current) => ({ ...current, area: event.target.value }))
               }
@@ -128,6 +163,7 @@ export function AssetFormModal({
           </Field>
           <Field label="Criticidad">
             <Select
+              name="criticality"
               onChange={(event) =>
                 setValues((current) => ({
                   ...current,
@@ -143,6 +179,7 @@ export function AssetFormModal({
           </Field>
           <Field label="Fabricante">
             <Input
+              name="manufacturer"
               onChange={(event) =>
                 setValues((current) => ({ ...current, manufacturer: event.target.value }))
               }
@@ -151,6 +188,7 @@ export function AssetFormModal({
           </Field>
           <Field label="Modelo">
             <Input
+              name="model"
               onChange={(event) =>
                 setValues((current) => ({ ...current, model: event.target.value }))
               }
@@ -159,6 +197,7 @@ export function AssetFormModal({
           </Field>
           <Field label="Serie">
             <Input
+              name="serialNumber"
               onChange={(event) =>
                 setValues((current) => ({ ...current, serialNumber: event.target.value }))
               }
@@ -167,6 +206,7 @@ export function AssetFormModal({
           </Field>
           <Field label="Fecha instalacion">
             <Input
+              name="installationDate"
               onChange={(event) =>
                 setValues((current) => ({
                   ...current,
@@ -181,6 +221,7 @@ export function AssetFormModal({
 
         <Field label="Especificaciones">
           <Textarea
+            name="technicalSpecifications"
             onChange={(event) =>
               setValues((current) => ({
                 ...current,
@@ -197,6 +238,7 @@ export function AssetFormModal({
           <div className="grid gap-4 md:grid-cols-2">
             <label className="flex items-center gap-2 text-sm text-foreground">
               <input
+                name="cbmEnabled"
                 type="checkbox"
                 checked={values.cbmEnabled}
                 onChange={(e) => setValues((v) => ({ ...v, cbmEnabled: e.target.checked }))}
@@ -207,6 +249,7 @@ export function AssetFormModal({
             <div className="md:col-span-1" />
             <Field label="Temperatura (°C)">
               <Input
+                name="temperature"
                 type="number" step="0.1"
                 onChange={(e) => setValues((v) => ({ ...v, temperature: Number(e.target.value) }))}
                 value={values.temperature ?? 0}
@@ -214,6 +257,7 @@ export function AssetFormModal({
             </Field>
             <Field label="Umbral de alerta (°C)">
               <Input
+                name="alertThreshold"
                 type="number" step="0.1"
                 onChange={(e) => setValues((v) => ({ ...v, alertThreshold: Number(e.target.value) }))}
                 value={values.alertThreshold ?? 50}
@@ -221,6 +265,7 @@ export function AssetFormModal({
             </Field>
             <Field label="Vibración (mm/s)">
               <Input
+                name="vibration"
                 type="number" step="0.01"
                 onChange={(e) => setValues((v) => ({ ...v, vibration: Number(e.target.value) }))}
                 value={values.vibration ?? 0}
@@ -228,6 +273,7 @@ export function AssetFormModal({
             </Field>
             <Field label="Presión (psi)">
               <Input
+                name="pressure"
                 type="number" step="0.1"
                 onChange={(e) => setValues((v) => ({ ...v, pressure: Number(e.target.value) }))}
                 value={values.pressure ?? 0}
@@ -242,6 +288,7 @@ export function AssetFormModal({
           <div className="grid gap-4 md:grid-cols-3">
             <Field label="Severidad">
               <Input
+                name="severity"
                 type="number" min="1" max="10"
                 onChange={(e) => setValues((v) => ({ ...v, severity: Number(e.target.value) }))}
                 value={values.severity ?? 1}
@@ -249,6 +296,7 @@ export function AssetFormModal({
             </Field>
             <Field label="Ocurrencia">
               <Input
+                name="occurrence"
                 type="number" min="1" max="10"
                 onChange={(e) => setValues((v) => ({ ...v, occurrence: Number(e.target.value) }))}
                 value={values.occurrence ?? 1}
@@ -256,6 +304,7 @@ export function AssetFormModal({
             </Field>
             <Field label="Detección">
               <Input
+                name="detection"
                 type="number" min="1" max="10"
                 onChange={(e) => setValues((v) => ({ ...v, detection: Number(e.target.value) }))}
                 value={values.detection ?? 1}
