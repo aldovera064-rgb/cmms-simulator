@@ -20,7 +20,7 @@ import { DashboardSummary } from "@/components/dashboard/dashboard-summary";
 import { CompanyViewsPanel } from "@/components/dashboard/company-views-panel";
 import { Panel } from "@/components/ui/panel";
 import { runCbmCheck } from "@/lib/cbm-check";
-import { ensureSeedData, fetchAssets, fetchTechnicians, fetchWorkOrders } from "@/lib/cmms-data";
+import { ensureSeedData, fetchAssets, fetchTechnicians, fetchWorkOrders, cleanupOldHistory } from "@/lib/cmms-data";
 import { useI18n } from "@/lib/i18n/context";
 import { canManageUsers, isGod } from "@/lib/rbac";
 import { useSession } from "@/lib/session/context";
@@ -35,18 +35,26 @@ type DashboardPageContentProps = {
 };
 
 type AssetLike = {
+  id: string;
+  name?: string | null;
+  tag?: string | null;
   area: string | null;
   status: string | null;
   start_time: number | null;
+  severity?: number | null;
+  occurrence?: number | null;
+  detection?: number | null;
 };
 
 type WorkOrderLike = {
+  id: string;
   status: string | null;
   type: string | null;
   priority: string | null;
   created_at: string | null;
   started_at: string | null;
   completed_at: string | null;
+  technician?: string | null;
 };
 
 const defaultMetrics = {
@@ -88,6 +96,10 @@ export function DashboardPageContent({ metrics }: DashboardPageContentProps) {
 
       // Run CBM threshold checks and auto-create predictive WOs
       await runCbmCheck(activeCompanyId);
+
+      // Cleanup history records older than 365 days (temporary client-side approach)
+      // TODO: Replace with Supabase Edge Function or pg_cron for production
+      await cleanupOldHistory();
 
       setAssets(assetRows);
       setWorkOrders(workOrderRows);
@@ -141,6 +153,34 @@ export function DashboardPageContent({ metrics }: DashboardPageContentProps) {
       { name: dictionary.dashboard.correctiveLabel, value: corrective }
     ];
   }, [dictionary.dashboard, workOrders]);
+
+  const workOrdersPriorityData = useMemo(() => {
+    const p1 = workOrders.filter((item) => item.priority === "P1").length;
+    const p2 = workOrders.filter((item) => item.priority === "P2").length;
+    const p3 = workOrders.filter((item) => item.priority === "P3").length;
+    return [
+      { name: "P1 (Alta)", value: p1 },
+      { name: "P2 (Media)", value: p2 },
+      { name: "P3 (Baja)", value: p3 }
+    ];
+  }, [workOrders]);
+
+  const workOrdersByTechnicianData = useMemo(() => {
+    const byTech = workOrders.reduce<Record<string, number>>((acc, order) => {
+      if (order.technician) {
+        acc[order.technician] = (acc[order.technician] || 0) + 1;
+      }
+      return acc;
+    }, {});
+    return Object.entries(byTech).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 5);
+  }, [workOrders]);
+
+  const criticalAssets = useMemo(() => {
+    return assets.map(asset => {
+      const npr = (asset.severity ?? 1) * (asset.occurrence ?? 1) * (asset.detection ?? 1);
+      return { ...asset, npr };
+    }).sort((a, b) => b.npr - a.npr).slice(0, 5);
+  }, [assets]);
 
   const kpis = useMemo(() => {
     const totalAssets = assets.length;
@@ -210,6 +250,60 @@ export function DashboardPageContent({ metrics }: DashboardPageContentProps) {
       pmCompliance
     };
   }, [assets, techniciansCount, workOrders]);
+
+  const aiSuggestions = useMemo(() => {
+    const suggestions = [];
+
+    // Rule 1: High NPR assets
+    const highRisk = criticalAssets.filter(a => a.npr > 20);
+    if (highRisk.length > 0) {
+      suggestions.push({
+        type: "CRITICAL_RISK",
+        title: "Activos en Riesgo Crítico",
+        description: `Se detectaron ${highRisk.length} activos con NPR alto. Se recomienda crear OTs preventivas inmediatamente.`,
+        confidence: "alta"
+      });
+    }
+
+    // Rule 2: Low PM Compliance
+    if (kpis.pmCompliance < 80 && kpis.pmCompliance > 0) {
+      suggestions.push({
+        type: "LOW_COMPLIANCE",
+        title: "Bajo Cumplimiento Preventivo",
+        description: `El cumplimiento de PM está al ${kpis.pmCompliance.toFixed(0)}%. Priorizar WOs preventivas atrasadas para evitar paros.`,
+        confidence: "alta"
+      });
+    }
+
+    // Rule 3: High Backlog
+    if (kpis.backlog > 10) {
+      suggestions.push({
+        type: "HIGH_BACKLOG",
+        title: "Alto Volumen de Backlog",
+        description: `Hay ${kpis.backlog} OTs abiertas. Evaluar asignación de horas extra o balanceo de técnicos.`,
+        confidence: "media"
+      });
+    }
+
+    // Rule 4: General optimization
+    if (suggestions.length === 0) {
+      suggestions.push({
+        type: "ROOT_CAUSE",
+        title: "Operación Estable",
+        description: "El sistema está estable. Se recomienda revisar parámetros de OEE para mejoras incrementales.",
+        confidence: "media"
+      });
+    } else {
+      suggestions.push({
+        type: "ROOT_CAUSE",
+        title: "Análisis de Causa Raíz Sugerido",
+        description: "Múltiples alertas en la línea de producción. Realizar un diagrama Ishikawa (Fishbone) para evitar recurrencias.",
+        confidence: "baja"
+      });
+    }
+
+    return suggestions;
+  }, [criticalAssets, kpis]);
 
   return (
     <div className="space-y-6">
@@ -328,6 +422,76 @@ export function DashboardPageContent({ metrics }: DashboardPageContentProps) {
             ) : null}
           </div>
         </Panel>
+        
+        <Panel className="p-5 border-[#d6d0b8] bg-[#f8f6ea]">
+          <p className="mb-4 text-sm font-medium text-muted">OT por Prioridad</p>
+          <div className="h-56 w-full">
+            {mounted ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={workOrdersPriorityData} dataKey="value" nameKey="name" outerRadius={80} innerRadius={45}>
+                    {workOrdersPriorityData.map((entry, index) => (
+                      <Cell key={`${entry.name}-${index}`} fill={["#9f3a2f", "#C2A14D", "#6B8E23"][index % 3]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : null}
+          </div>
+        </Panel>
+
+        <Panel className="p-5 border-[#d6d0b8] bg-[#f8f6ea]">
+          <p className="mb-4 text-sm font-medium text-muted">Top Técnicos (Carga OT)</p>
+          <div className="h-56 w-full">
+            {mounted ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={workOrdersByTechnicianData} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#d6d0b8" />
+                  <XAxis type="number" allowDecimals={false} />
+                  <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 11 }} />
+                  <Tooltip />
+                  <Bar dataKey="value" fill="#C2A14D" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : null}
+          </div>
+        </Panel>
+
+        <Panel className="p-5 border-[#d6d0b8] bg-[#f8f6ea]">
+          <p className="mb-4 text-sm font-medium text-muted">Top 5 Activos Críticos (NPR)</p>
+          <div className="space-y-3">
+            {criticalAssets.map((asset) => (
+              <div key={asset.id} className="flex justify-between items-center text-sm">
+                <span className="truncate w-3/5">{asset.name || asset.tag}</span>
+                <span className={`px-2 py-0.5 rounded-md text-xs font-medium ${asset.npr > 20 ? 'bg-danger/20 text-danger' : 'bg-success/20 text-success'}`}>
+                  NPR: {asset.npr.toFixed(0)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      </div>
+
+      <div className="mb-8">
+        <h2 className="mb-4 text-xl font-semibold">Acciones Recomendadas (IA Insights)</h2>
+        <div className="grid gap-4 md:grid-cols-2">
+          {aiSuggestions.map((suggestion, idx) => (
+            <Panel key={idx} className="p-5 border-[#d6d0b8] bg-[#f8f6ea]">
+              <div className="flex justify-between items-start mb-2">
+                <h3 className="font-semibold">{suggestion.title}</h3>
+                <span className={`text-xs px-2 py-1 rounded-full ${
+                  suggestion.confidence === "alta" ? "bg-success/20 text-success" :
+                  suggestion.confidence === "media" ? "bg-accent/20 text-accent" :
+                  "bg-muted/20 text-muted-foreground"
+                }`}>
+                  Confianza: {suggestion.confidence}
+                </span>
+              </div>
+              <p className="text-sm text-muted">{suggestion.description}</p>
+            </Panel>
+          ))}
+        </div>
       </div>
 
     </div>

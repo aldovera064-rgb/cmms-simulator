@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { IshikawaModal } from "@/components/work-orders/ishikawa-modal";
 import { WorkOrderPriorityBadge } from "@/components/work-orders/work-order-priority-badge";
 import { WorkOrderStatusBadge } from "@/components/work-orders/work-order-status-badge";
+import { useI18n } from "@/lib/i18n/context";
 import { WorkOrderApiError, WorkOrderListItem, WorkOrderUpdateInput } from "@/types/work-orders";
 
 type WorkOrderDetailModalProps = {
@@ -35,12 +36,66 @@ export function WorkOrderDetailModal({
   onDelete,
   canEdit = true
 }: WorkOrderDetailModalProps) {
+  const { locale } = useI18n();
   const [technicianName, setTechnicianName] = useState("");
   const [description, setDescription] = useState("");
   const [workPerformed, setWorkPerformed] = useState("");
   const [rootCause, setRootCause] = useState("");
   const [repairTimeMinutes, setRepairTimeMinutes] = useState("");
   const [ishikawaOpen, setIshikawaOpen] = useState(false);
+
+  const copy =
+    locale === "en"
+      ? {
+          detailTitle: "Detail",
+          asset: "Asset",
+          currentStatus: "Current status",
+          technician: "Technician",
+          timeline: "Timeline",
+          opened: "Opened",
+          started: "Started",
+          closed: "Closed",
+          description: "Description",
+          startWo: "Start WO",
+          putOnHold: "Put on hold",
+          resume: "Resume",
+          saveChanges: "Save changes",
+          deleteWo: "Delete",
+          exportPdf: "Export PDF",
+          closeSection: "WO Closure",
+          closeSectionDesc: "To close a corrective or preventive WO you must fill all required information.",
+          workPerformed: "Work performed",
+          rootCause: "Root cause",
+          repairTime: "Repair time (min)",
+          ishikawa: "🐟 Root cause analysis (Ishikawa)",
+          closeWo: "Close WO",
+          modalDesc: "Manage the WO, update its technician and execute the status flow."
+        }
+      : {
+          detailTitle: "Detalle",
+          asset: "Activo",
+          currentStatus: "Estado actual",
+          technician: "Técnico",
+          timeline: "Timeline",
+          opened: "Apertura",
+          started: "Inicio",
+          closed: "Cierre",
+          description: "Descripción",
+          startWo: "Iniciar OT",
+          putOnHold: "Poner en espera",
+          resume: "Reanudar",
+          saveChanges: "Guardar cambios",
+          deleteWo: "Eliminar",
+          exportPdf: "Exportar PDF",
+          closeSection: "Cierre de OT",
+          closeSectionDesc: "Para cerrar una OT correctiva o preventiva debes capturar toda la información obligatoria.",
+          workPerformed: "Trabajo realizado",
+          rootCause: "Causa raíz",
+          repairTime: "Tiempo de reparación (min)",
+          ishikawa: "🐟 Análisis causa raíz (Ishikawa)",
+          closeWo: "Cerrar OT",
+          modalDesc: "Gestiona la OT, actualiza su técnico y ejecuta el flujo de estados."
+        };
 
   useEffect(() => {
     setTechnicianName(workOrder?.technicianName ?? "");
@@ -54,32 +109,23 @@ export function WorkOrderDetailModal({
     return null;
   }
 
-  const closeLabel =
-    workOrder.status === "OPEN"
-      ? "Iniciar"
-      : workOrder.status === "IN_PROGRESS"
-        ? "Poner en espera"
-        : workOrder.status === "ON_HOLD"
-          ? "Reanudar"
-          : "Cerrada";
-
   return (
     <Modal
-      description="Gestiona la OT, actualiza su tecnico y ejecuta el flujo de estados."
+      description={copy.modalDesc}
       onClose={onClose}
       open={open}
-      title={`Detalle ${workOrder.number}`}
+      title={`${copy.detailTitle} ${workOrder.number}`}
     >
       <div className="max-h-[70vh] overflow-y-auto pr-2 space-y-6 bg-panelAlt/40 rounded-xl backdrop-blur-sm scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-transparent">
         <div className="grid gap-3 md:grid-cols-2">
           <div className="rounded-2xl border border-border bg-panelAlt/65 p-4">
-            <p className="text-xs uppercase tracking-[0.2em] text-muted">Activo</p>
+            <p className="text-xs uppercase tracking-[0.2em] text-muted">{copy.asset}</p>
             <p className="mt-2 text-lg font-semibold">
               {workOrder.assetTag} - {workOrder.assetName}
             </p>
           </div>
           <div className="rounded-2xl border border-border bg-panelAlt/65 p-4">
-            <p className="text-xs uppercase tracking-[0.2em] text-muted">Estado actual</p>
+            <p className="text-xs uppercase tracking-[0.2em] text-muted">{copy.currentStatus}</p>
             <div className="mt-2 flex items-center gap-3">
               <WorkOrderPriorityBadge value={workOrder.priority} />
               <WorkOrderStatusBadge value={workOrder.status} />
@@ -89,22 +135,22 @@ export function WorkOrderDetailModal({
 
         <div className="grid gap-4 md:grid-cols-2">
           <label className="block space-y-2">
-            <span className="text-sm text-muted">Tecnico</span>
+            <span className="text-sm text-muted">{copy.technician}</span>
             <Input disabled={!canEdit} onChange={(event) => setTechnicianName(event.target.value)} value={technicianName} />
           </label>
 
           <div className="rounded-2xl border border-border bg-panelAlt/65 p-4">
-            <p className="text-xs uppercase tracking-[0.2em] text-muted">Timeline</p>
+            <p className="text-xs uppercase tracking-[0.2em] text-muted">{copy.timeline}</p>
             <div className="mt-3 space-y-2 text-sm text-muted">
-              <p>Apertura: {formatDate(workOrder.createdAt)}</p>
-              <p>Inicio: {workOrder.startedAt ? formatDate(workOrder.startedAt) : "-"}</p>
-              <p>Cierre: {workOrder.closedAt ? formatDate(workOrder.closedAt) : "-"}</p>
+              <p>{copy.opened}: {formatDate(workOrder.createdAt)}</p>
+              <p>{copy.started}: {workOrder.startedAt ? formatDate(workOrder.startedAt) : "-"}</p>
+              <p>{copy.closed}: {workOrder.closedAt ? formatDate(workOrder.closedAt) : "-"}</p>
             </div>
           </div>
         </div>
 
         <label className="block space-y-2">
-          <span className="text-sm text-muted">Descripcion</span>
+          <span className="text-sm text-muted">{copy.description}</span>
           <Textarea disabled={!canEdit} onChange={(event) => setDescription(event.target.value)} value={description} />
         </label>
 
@@ -114,7 +160,7 @@ export function WorkOrderDetailModal({
               disabled={loading}
               onClick={() => onUpdate({ status: "IN_PROGRESS", technicianName, description })}
             >
-              Iniciar OT
+              {copy.startWo}
             </Button>
           ) : null}
 
@@ -124,7 +170,7 @@ export function WorkOrderDetailModal({
               onClick={() => onUpdate({ status: "ON_HOLD", technicianName, description })}
               variant="secondary"
             >
-              Poner en espera
+              {copy.putOnHold}
             </Button>
           ) : null}
 
@@ -134,7 +180,7 @@ export function WorkOrderDetailModal({
               onClick={() => onUpdate({ status: "IN_PROGRESS", technicianName, description })}
               variant="secondary"
             >
-              Reanudar
+              {copy.resume}
             </Button>
           ) : null}
 
@@ -144,32 +190,32 @@ export function WorkOrderDetailModal({
               onClick={() => onUpdate({ technicianName, description })}
               variant="secondary"
             >
-              Guardar cambios
+              {copy.saveChanges}
             </Button>
           ) : null}
 
           {canEdit ? (
             <Button disabled={loading} onClick={onDelete} variant="danger">
-              Eliminar
+              {copy.deleteWo}
             </Button>
           ) : null}
 
           <Button disabled={loading} onClick={onExportPdf} variant="secondary">
-            Export PDF
+            {copy.exportPdf}
           </Button>
         </div>
 
         {canEdit && workOrder.status !== "CLOSED" ? (
           <div className="space-y-4 rounded-2xl border border-border bg-panelAlt/50 p-4">
             <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-accent">Cierre de OT</p>
+              <p className="text-xs uppercase tracking-[0.2em] text-accent">{copy.closeSection}</p>
               <p className="mt-2 text-sm text-muted">
-                Para cerrar una OT correctiva o preventiva debes capturar toda la informacion obligatoria.
+                {copy.closeSectionDesc}
               </p>
             </div>
 
             <label className="block space-y-2">
-              <span className="text-sm text-muted">Trabajo realizado</span>
+              <span className="text-sm text-muted">{copy.workPerformed}</span>
               <Textarea
                 onChange={(event) => setWorkPerformed(event.target.value)}
                 value={workPerformed}
@@ -178,12 +224,12 @@ export function WorkOrderDetailModal({
 
             <div className="grid gap-4 md:grid-cols-2">
               <label className="block space-y-2">
-                <span className="text-sm text-muted">Causa raiz</span>
+                <span className="text-sm text-muted">{copy.rootCause}</span>
                 <Textarea onChange={(event) => setRootCause(event.target.value)} value={rootCause} />
               </label>
 
               <label className="block space-y-2">
-                <span className="text-sm text-muted">Tiempo de reparacion (min)</span>
+                <span className="text-sm text-muted">{copy.repairTime}</span>
                 <Input
                   min={1}
                   onChange={(event) => setRepairTimeMinutes(event.target.value)}
@@ -195,7 +241,7 @@ export function WorkOrderDetailModal({
 
             <div className="flex justify-between">
               <Button variant="secondary" onClick={() => setIshikawaOpen(true)}>
-                🐟 Análisis causa raíz (Ishikawa)
+                {copy.ishikawa}
               </Button>
               <Button
                 disabled={loading}
@@ -211,7 +257,7 @@ export function WorkOrderDetailModal({
                   })
                 }
               >
-                Cerrar OT
+                {copy.closeWo}
               </Button>
             </div>
           </div>

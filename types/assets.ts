@@ -35,6 +35,7 @@ export type AssetFormValues = {
   serialNumber: string;
   installationDate: string;
   technicalSpecifications: string;
+  description?: string;
   // CBM
   temperature?: number;
   vibration?: number;

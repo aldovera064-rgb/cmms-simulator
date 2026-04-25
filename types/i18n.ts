@@ -1,4 +1,4 @@
-﻿export type Locale = "es" | "en";
+export type Locale = "es" | "en";
 
 export type Dictionary = {
   appName: string;
@@ -10,6 +10,7 @@ export type Dictionary = {
     spareParts: string;
     technicians: string;
     generalNotes: string;
+    settings: string;
   };
   auth: {
     title: string;

@@ -184,28 +184,33 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
       const isEditing = Boolean(editingAsset);
 
       if (isEditing) {
+        const updatePayload = {
+          name: values.name || values.tag,
+          description: values.description ?? "",
+          severity: values.severity ?? 1,
+          occurrence: values.occurrence ?? 1,
+          detection: values.detection ?? 1,
+          temperature: values.temperature ?? null,
+          vibration: values.vibration ?? null,
+          pressure: values.pressure ?? null,
+          current_val: values.currentVal ?? null, // using current_val as that is DB column
+          alert_threshold: values.alertThreshold ?? null,
+          cbm_enabled: values.cbmEnabled ?? false
+          // ❌ NO incluir company_id
+        };
+
+        console.error("Asset payload:", updatePayload);
+
         const { error } = await supabase
           .from("assets")
-          .update({
-            name: values.name || values.tag,
-            area: values.area || "Producción",
-            status: "OPERATIVE",
-            start_time: editingAsset?.startTime ?? Date.now(),
-            company_id: companyIdForWrite,
-            temperature: values.temperature,
-            vibration: values.vibration,
-            current_val: values.currentVal,
-            pressure: values.pressure,
-            alert_threshold: values.alertThreshold,
-            cbm_enabled: values.cbmEnabled,
-            severity: values.severity,
-            occurrence: values.occurrence,
-            detection: values.detection
-          })
+          .update(updatePayload)
           .eq("id", editingAsset!.id)
           .eq("company_id", activeCompanyId);
 
-        if (error) throw error;
+        if (error) {
+          console.error("Supabase error:", error);
+          throw error;
+        }
       } else {
         const { error } = await supabase.from("assets").insert([
           {
@@ -213,6 +218,7 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
             area: values.area || "Producción",
             status: "OPERATIVE",
             start_time: Date.now(),
+            serial_number: values.serialNumber || null,
             company_id: companyIdForWrite,
             temperature: values.temperature,
             vibration: values.vibration,
@@ -226,14 +232,18 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
           }
         ]);
 
-        if (error) throw error;
+        if (error) {
+          console.error("Asset insert error:", error);
+          throw error;
+        }
       }
 
       const rows = await fetchAssets(activeCompanyId);
       setAssets(rows.map(mapAsset));
       setFormOpen(false);
       setEditingAsset(null);
-    } catch {
+    } catch (err) {
+      console.error("Asset save failed:", err);
       setFormError(locale === "en" ? "Could not save asset." : "No se pudo guardar el activo.");
     } finally {
       setSaving(false);

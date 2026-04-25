@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import QRCode from "qrcode";
@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import { Select } from "@/components/ui/select";
 import { getScopedCompanyId } from "@/lib/company";
-import { ensureSeedData, fetchAssets, fetchTechnicians, fetchWorkOrders } from "@/lib/cmms-data";
+import { ensureSeedData, fetchAssets, fetchTechnicians, fetchWorkOrders, fetchWorkOrderHistory, type WorkOrderHistoryRow } from "@/lib/cmms-data";
 import { useI18n } from "@/lib/i18n/context";
 import { canEditModule, isReadOnlyRole } from "@/lib/rbac";
 import { useSession } from "@/lib/session/context";
@@ -103,6 +103,13 @@ function mapWorkOrder(row: {
   };
 }
 
+function formatHistoryDate(value: string) {
+  return new Intl.DateTimeFormat("es-MX", {
+    dateStyle: "medium",
+    timeStyle: "short"
+  }).format(new Date(value));
+}
+
 export function WorkOrdersPageClient({ initialWorkOrders }: Props) {
   const { locale } = useI18n();
   const { user } = useSession();
@@ -111,6 +118,9 @@ export function WorkOrdersPageClient({ initialWorkOrders }: Props) {
   const [assets, setAssets] = useState<AssetOption[]>([]);
   const [technicians, setTechnicians] = useState<TechnicianOption[]>([]);
   const [workOrders, setWorkOrders] = useState<WorkOrderListItem[]>(initialWorkOrders);
+  const [history, setHistory] = useState<WorkOrderHistoryRow[]>([]);
+  const [usersMap, setUsersMap] = useState<Record<string, string>>({});
+  const [showHistory, setShowHistory] = useState(false);
   const [qrImageMap, setQrImageMap] = useState<Record<string, string>>({});
 
   const [filters, setFilters] = useState<WorkOrderFilters>({
@@ -138,7 +148,19 @@ export function WorkOrdersPageClient({ initialWorkOrders }: Props) {
           qr: "QR",
           actions: "Actions",
           edit: "Edit",
-          noData: "No work orders"
+          noData: "No work orders",
+          historyTitle: "Work Order History",
+          historyToggle: "View history",
+          historyHide: "Hide history",
+          historyAction: "Action",
+          historyOriginalStatus: "Original status",
+          historyDate: "Date",
+          historyTechnician: "Technician",
+          historyEmpty: "No history records",
+          historyDisclaimer: "History records are automatically deleted after 365 days.",
+          actionCreated: "Created",
+          actionCompleted: "Completed",
+          actionDeleted: "Deleted"
         }
       : {
           title: "Órdenes de trabajo",
@@ -151,7 +173,19 @@ export function WorkOrdersPageClient({ initialWorkOrders }: Props) {
           qr: "QR",
           actions: "Acciones",
           edit: "Editar",
-          noData: "No hay órdenes"
+          noData: "No hay órdenes",
+          historyTitle: "Historial de OT",
+          historyToggle: "Ver historial",
+          historyHide: "Ocultar historial",
+          historyAction: "Acción",
+          historyOriginalStatus: "Estado original",
+          historyDate: "Fecha",
+          historyTechnician: "Técnico",
+          historyEmpty: "No hay registros de historial",
+          historyDisclaimer: "Los registros del historial se eliminan automáticamente después de 365 días.",
+          actionCreated: "Creada",
+          actionCompleted: "Completada",
+          actionDeleted: "Eliminada"
         };
 
   useEffect(() => {
@@ -160,15 +194,18 @@ export function WorkOrdersPageClient({ initialWorkOrders }: Props) {
         setAssets([]);
         setTechnicians([]);
         setWorkOrders([]);
+        setHistory([]);
         return;
       }
 
       await ensureSeedData(activeCompanyId);
 
-      const [assetRows, technicianRows, workOrderRows] = await Promise.all([
+      const [assetRows, technicianRows, workOrderRows, historyRows, adminsData] = await Promise.all([
         fetchAssets(activeCompanyId),
         fetchTechnicians(activeCompanyId),
-        fetchWorkOrders(activeCompanyId)
+        fetchWorkOrders(activeCompanyId),
+        fetchWorkOrderHistory(activeCompanyId),
+        supabase.from("admins").select("id, username")
       ]);
 
       setAssets(
@@ -186,6 +223,15 @@ export function WorkOrdersPageClient({ initialWorkOrders }: Props) {
         }))
       );
       setWorkOrders(workOrderRows.map(mapWorkOrder));
+      setHistory(historyRows);
+
+      if (adminsData.data) {
+        const map: Record<string, string> = {};
+        adminsData.data.forEach((admin: any) => {
+          map[admin.id] = admin.username;
+        });
+        setUsersMap(map);
+      }
     };
 
     void load();
@@ -215,8 +261,48 @@ export function WorkOrdersPageClient({ initialWorkOrders }: Props) {
   }, [filters, workOrders]);
 
   async function refreshWorkOrders() {
-    const rows = await fetchWorkOrders(activeCompanyId);
+    const [rows, historyRows, adminsData] = await Promise.all([
+      fetchWorkOrders(activeCompanyId),
+      fetchWorkOrderHistory(activeCompanyId),
+      supabase.from("admins").select("id, username")
+    ]);
     setWorkOrders(rows.map(mapWorkOrder));
+    setHistory(historyRows);
+
+    if (adminsData.data) {
+      const map: Record<string, string> = {};
+      adminsData.data.forEach((admin: any) => {
+        map[admin.id] = admin.username;
+      });
+      setUsersMap(map);
+    }
+  }
+
+  /** Save snapshot to history table */
+  async function saveWorkOrderSnapshot(workOrderId: string, actionType: "created" | "completed" | "deleted" | "updated", statusOriginal: string) {
+    if (!activeCompanyId || !user?.id) {
+      console.error("Missing user_id");
+      return;
+    }
+
+    // Fetch full record for snapshot
+    const { data } = await supabase.from("work_orders").select("*").eq("id", workOrderId).maybeSingle();
+    if (!data) return;
+
+    const { error } = await supabase.from("work_order_history").insert([
+      {
+        work_order_id: workOrderId,
+        snapshot: data,
+        action_type: actionType,
+        status_original: statusOriginal,
+        company_id: activeCompanyId,
+        user_id: user.id
+      }
+    ]);
+
+    if (error) {
+      console.error("History insert error:", error);
+    }
   }
 
   async function handleCreate(values: WorkOrderCreateInput) {
@@ -227,7 +313,7 @@ export function WorkOrdersPageClient({ initialWorkOrders }: Props) {
       status: "OPEN"
     });
 
-    const { error } = await supabase.from("work_orders").insert([
+    const { data, error } = await supabase.from("work_orders").insert([
       {
         title: values.description,
         description: values.description,
@@ -240,9 +326,10 @@ export function WorkOrdersPageClient({ initialWorkOrders }: Props) {
         qr_code: qrCode,
         company_id: companyIdForWrite
       }
-    ]);
+    ]).select("id").single();
 
-    if (!error) {
+    if (!error && data) {
+      await saveWorkOrderSnapshot(data.id, "created", "OPEN");
       await refreshWorkOrders();
       setCreateOpen(false);
     }
@@ -254,6 +341,12 @@ export function WorkOrdersPageClient({ initialWorkOrders }: Props) {
 
     const nextStatus = values.status ?? selectedWorkOrder.status;
     const completedAt = nextStatus === "CLOSED" ? (values.closedAt ?? new Date().toISOString()) : null;
+
+    // Save history snapshot when closing
+    if (nextStatus === "CLOSED" && selectedWorkOrder.status !== "CLOSED") {
+      await saveWorkOrderSnapshot(selectedWorkOrder.id, "completed", selectedWorkOrder.status);
+    }
+
     const { error } = await supabase
       .from("work_orders")
       .update({
@@ -267,7 +360,8 @@ export function WorkOrdersPageClient({ initialWorkOrders }: Props) {
         started_at: values.startedAt ?? selectedWorkOrder.startedAt,
         completed_at: completedAt ?? selectedWorkOrder.completedAt,
         root_cause: values.rootCause ?? selectedWorkOrder.rootCause,
-        action_taken: values.actionTaken ?? values.workPerformed ?? selectedWorkOrder.actionTaken
+        action_taken: values.actionTaken ?? values.workPerformed ?? selectedWorkOrder.actionTaken,
+        ...(nextStatus === "CLOSED" ? { closed_at: completedAt } : {})
       })
       .eq("id", selectedWorkOrder.id)
       .eq("company_id", activeCompanyId);
@@ -288,7 +382,8 @@ export function WorkOrdersPageClient({ initialWorkOrders }: Props) {
         });
       }
       await refreshWorkOrders();
-      setSelectedWorkOrder((current) => (current ? { ...current, ...values } : current));
+      // Close modal after successful save
+      setSelectedWorkOrder(null);
     }
   }
 
@@ -311,7 +406,15 @@ export function WorkOrdersPageClient({ initialWorkOrders }: Props) {
     if (!canMutate) return;
     if (!selectedWorkOrder) return;
 
-    const { error } = await supabase.from("work_orders").delete().eq("id", selectedWorkOrder.id).eq("company_id", activeCompanyId);
+    // Save snapshot before soft delete
+    await saveWorkOrderSnapshot(selectedWorkOrder.id, "deleted", selectedWorkOrder.status);
+
+    // Soft delete instead of hard delete
+    const { error } = await supabase
+      .from("work_orders")
+      .update({ is_active: false, deleted_at: new Date().toISOString() })
+      .eq("id", selectedWorkOrder.id)
+      .eq("company_id", activeCompanyId);
 
     if (!error) {
       setSelectedWorkOrder(null);
@@ -323,7 +426,12 @@ export function WorkOrdersPageClient({ initialWorkOrders }: Props) {
     <div className="space-y-6">
       <Panel className="p-6 flex justify-between items-center border-[#d6d0b8] bg-[#f8f6ea]">
         <h1 className="text-2xl font-semibold">{copy.title}</h1>
-        {canMutate ? <Button onClick={() => setCreateOpen(true)}>{copy.newOt}</Button> : null}
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={() => setShowHistory(!showHistory)}>
+            {showHistory ? copy.historyHide : copy.historyToggle}
+          </Button>
+          {canMutate ? <Button onClick={() => setCreateOpen(true)}>{copy.newOt}</Button> : null}
+        </div>
       </Panel>
 
       <Panel className="p-5 border-[#d6d0b8] bg-[#f8f6ea]">
@@ -394,6 +502,89 @@ export function WorkOrdersPageClient({ initialWorkOrders }: Props) {
           </table>
         </div>
       </Panel>
+
+      {/* ── HISTORIAL DE OT ────────────────────────────────── */}
+      {showHistory && (
+        <Panel className="border-[#d6d0b8] bg-[#f8f6ea]">
+          <div className="p-5">
+            <h2 className="text-lg font-semibold mb-4">{copy.historyTitle}</h2>
+          </div>
+          <div className="w-full overflow-x-auto">
+            <table className="table-auto w-full border-collapse divide-y divide-border text-sm">
+              <thead className="bg-[#f5f5dc] text-xs uppercase text-muted">
+                <tr>
+                  <th className="px-4 py-2 text-left align-middle">{copy.ot}</th>
+                  <th className="px-4 py-2 text-left align-middle">{copy.asset}</th>
+                  <th className="px-4 py-2 text-left align-middle">{copy.historyTechnician}</th>
+                  <th className="px-4 py-2 text-left align-middle">{copy.priority}</th>
+                  <th className="px-4 py-2 text-left align-middle">Usuario</th>
+                  <th className="px-4 py-2 text-left align-middle">{copy.historyOriginalStatus}</th>
+                  <th className="px-4 py-2 text-left align-middle">{copy.historyAction}</th>
+                  <th className="px-4 py-2 text-left align-middle">{copy.historyDate}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {history.map((record) => {
+                  const snap = record.snapshot as Record<string, unknown>;
+                  return (
+                    <tr key={record.id}>
+                      <td className="px-4 py-2 text-left align-middle">
+                        {snap.title as string ?? snap.description as string ?? "-"}
+                      </td>
+                      <td className="px-4 py-2 text-left align-middle">
+                        {(snap.asset_id as string)?.slice(0, 6)?.toUpperCase() ?? "-"}
+                      </td>
+                      <td className="px-4 py-2 text-left align-middle">
+                        {snap.technician as string ?? "-"}
+                      </td>
+                      <td className="px-4 py-2 text-left align-middle">
+                        {snap.priority as string ?? "-"}
+                      </td>
+                      <td className="px-4 py-2 text-left align-middle">
+                        {usersMap[record.user_id as string] || record.user_id || "-"}
+                      </td>
+                      <td className="px-4 py-2 text-left align-middle">
+                        {record.status_original ?? "-"}
+                      </td>
+                      <td className="px-4 py-2 text-left align-middle">
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-medium ${
+                            record.action_type === "created"
+                              ? "bg-success/20 text-success"
+                              : record.action_type === "completed"
+                              ? "bg-[#0ea5e9]/20 text-[#0ea5e9]"
+                              : "bg-danger/20 text-danger"
+                          }`}
+                        >
+                          {record.action_type === "created"
+                            ? copy.actionCreated
+                            : record.action_type === "completed"
+                            ? copy.actionCompleted
+                            : copy.actionDeleted}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 text-left align-middle">
+                        {formatHistoryDate(record.created_at)}
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {history.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="py-6 text-center text-muted">
+                      {copy.historyEmpty}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="p-4 text-xs text-muted text-center border-t border-border">
+            {copy.historyDisclaimer}
+          </div>
+        </Panel>
+      )}
 
       <WorkOrderFormModal
         assets={assets}

@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState, type FormEvent } from "react";
 
@@ -11,11 +11,14 @@ import { canEditModule } from "@/lib/rbac";
 import { useSession } from "@/lib/session/context";
 import { supabase } from "@/lib/supabase";
 
+const UNIT_OPTIONS = ["piezas", "kg", "L", "m", "unidades", "galones", "cajas"] as const;
+
 type SparePart = {
   id: string;
   name: string;
   stock: number;
   minStock: number;
+  unit: string;
   location: string;
 };
 
@@ -23,12 +26,13 @@ type SparePartsPageClientProps = {
   initialSpareParts: SparePart[];
 };
 
-function mapSparePart(row: { id: string; name: string | null; stock: number | null; location: string | null }): SparePart {
+function mapSparePart(row: { id: string; name: string | null; stock: number | null; min_stock: number | null; unit: string | null; location: string | null }): SparePart {
   return {
     id: row.id,
     name: row.name ?? "",
     stock: row.stock ?? 0,
-    minStock: 2,
+    minStock: row.min_stock ?? 0,
+    unit: row.unit ?? "piezas",
     location: row.location ?? ""
   };
 }
@@ -42,7 +46,9 @@ export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClient
   const [name, setName] = useState("");
   const [stock, setStock] = useState("");
   const [minStock, setMinStock] = useState("");
+  const [unit, setUnit] = useState("piezas");
   const [location, setLocation] = useState("");
+  const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const canMutate = canEditModule(user?.role, "spare_parts");
   const readOnly = !canMutate;
@@ -52,13 +58,14 @@ export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClient
       ? {
           registry: "Spare Parts Registry",
           title: "Spare Parts",
-          subtitle: "CMMS system for industrial maintenance management.",
+          subtitle: "Inventory management for maintenance operations.",
           create: "Create spare part",
           save: "Save",
           cancel: "Cancel",
           name: "Name",
           stock: "Stock",
           minStock: "Min stock",
+          unit: "Unit",
           location: "Location",
           actions: "Actions",
           edit: "Edit",
@@ -75,6 +82,7 @@ export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClient
           name: "Nombre",
           stock: "Stock",
           minStock: "Stock mínimo",
+          unit: "Unidad",
           location: "Ubicación",
           actions: "Acciones",
           edit: "Editar",
@@ -97,12 +105,18 @@ export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClient
     void load();
   }, [activeCompanyId]);
 
+  useEffect(() => {
+    setUnit(localStorage.getItem("cmms_default_unit") || "piezas");
+  }, []);
+
   const resetForm = () => {
     setName("");
     setStock("");
     setMinStock("");
+    setUnit(localStorage.getItem("cmms_default_unit") || "piezas");
     setLocation("");
     setEditingId(null);
+    setFormOpen(false);
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -121,7 +135,7 @@ export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClient
     if (editingId) {
       await supabase
         .from("spare_parts")
-        .update({ name: trimmedName, stock: parsedStock, location: trimmedLocation })
+        .update({ name: trimmedName, stock: parsedStock, min_stock: parsedMinStock, unit, location: trimmedLocation })
         .eq("id", editingId)
         .eq("company_id", activeCompanyId);
 
@@ -133,6 +147,7 @@ export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClient
                 name: trimmedName,
                 stock: parsedStock,
                 minStock: parsedMinStock,
+                unit,
                 location: trimmedLocation
               }
             : part
@@ -144,7 +159,7 @@ export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClient
 
     await supabase
       .from("spare_parts")
-      .insert([{ name: trimmedName, stock: parsedStock, location: trimmedLocation, company_id: companyIdForWrite }]);
+      .insert([{ name: trimmedName, stock: parsedStock, min_stock: parsedMinStock, unit, location: trimmedLocation, company_id: companyIdForWrite }]);
 
     const rows = await fetchSpareParts(activeCompanyId);
     setSpareParts(rows.map(mapSparePart));
@@ -157,7 +172,10 @@ export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClient
     setName(part.name);
     setStock(part.stock.toString());
     setMinStock(part.minStock.toString());
+    setUnit(part.unit);
     setLocation(part.location);
+    setFormOpen(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleDelete = async (partId: string) => {
@@ -180,72 +198,86 @@ export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClient
             <p className="text-sm text-muted">{copy.subtitle}</p>
           </div>
 
-          {canMutate ? <Button onClick={resetForm}>{copy.create}</Button> : null}
+          {canMutate ? <Button onClick={() => { resetForm(); setFormOpen(true); }}>{copy.create}</Button> : null}
         </div>
       </Panel>
 
-      <Panel className="p-6 border-[#d6d0b8] bg-[#f8f6ea]">
-        <form className="grid gap-4 md:grid-cols-5 md:items-end" onSubmit={handleSubmit}>
-          <label className="space-y-2 text-sm">
-            <span className="text-muted">{copy.name}</span>
-            <input
-              className="w-full rounded-2xl border border-border bg-panelAlt px-3 py-2.5 text-sm outline-none focus:border-accent"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder={copy.name}
-              disabled={readOnly}
-            />
-          </label>
+      {formOpen && (
+        <Panel className="p-6 border-[#d6d0b8] bg-[#f8f6ea]">
+          <form className="grid gap-4 md:grid-cols-6 md:items-end" onSubmit={handleSubmit}>
+            <label className="space-y-2 text-sm">
+              <span className="text-muted">{copy.name}</span>
+              <input
+                className="w-full rounded-2xl border border-border bg-panelAlt px-3 py-2.5 text-sm outline-none focus:border-accent"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder={copy.name}
+                disabled={readOnly}
+              />
+            </label>
 
-          <label className="space-y-2 text-sm">
-            <span className="text-muted">{copy.stock}</span>
-            <input
-              className="w-full rounded-2xl border border-border bg-panelAlt px-3 py-2.5 text-sm outline-none focus:border-accent"
-              value={stock}
-              onChange={(event) => setStock(event.target.value)}
-              placeholder="0"
-              type="number"
-              min={0}
-              disabled={readOnly}
-            />
-          </label>
+            <label className="space-y-2 text-sm">
+              <span className="text-muted">{copy.stock}</span>
+              <input
+                className="w-full rounded-2xl border border-border bg-panelAlt px-3 py-2.5 text-sm outline-none focus:border-accent"
+                value={stock}
+                onChange={(event) => setStock(event.target.value)}
+                placeholder="0"
+                type="number"
+                min={0}
+                disabled={readOnly}
+              />
+            </label>
 
-          <label className="space-y-2 text-sm">
-            <span className="text-muted">{copy.minStock}</span>
-            <input
-              className="w-full rounded-2xl border border-border bg-panelAlt px-3 py-2.5 text-sm outline-none focus:border-accent"
-              value={minStock}
-              onChange={(event) => setMinStock(event.target.value)}
-              placeholder="0"
-              type="number"
-              min={0}
-              disabled={readOnly}
-            />
-          </label>
+            <label className="space-y-2 text-sm">
+              <span className="text-muted">{copy.minStock}</span>
+              <input
+                className="w-full rounded-2xl border border-border bg-panelAlt px-3 py-2.5 text-sm outline-none focus:border-accent"
+                value={minStock}
+                onChange={(event) => setMinStock(event.target.value)}
+                placeholder="0"
+                type="number"
+                min={0}
+                disabled={readOnly}
+              />
+            </label>
 
-          <label className="space-y-2 text-sm">
-            <span className="text-muted">{copy.location}</span>
-            <input
-              className="w-full rounded-2xl border border-border bg-panelAlt px-3 py-2.5 text-sm outline-none focus:border-accent"
-              value={location}
-              onChange={(event) => setLocation(event.target.value)}
-              placeholder={copy.location}
-              disabled={readOnly}
-            />
-          </label>
+            <label className="space-y-2 text-sm">
+              <span className="text-muted">{copy.unit}</span>
+              <select
+                className="w-full rounded-2xl border border-border bg-panelAlt px-3 py-2.5 text-sm outline-none focus:border-accent"
+                value={unit}
+                onChange={(event) => setUnit(event.target.value)}
+                disabled={readOnly}
+              >
+                {UNIT_OPTIONS.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
+              </select>
+            </label>
 
-          <div className="flex gap-2">
-            <Button type="submit" disabled={readOnly}>
-              {editingId ? copy.save : copy.create}
-            </Button>
-            {editingId ? (
-              <Button type="button" variant="secondary" onClick={resetForm}>
+            <label className="space-y-2 text-sm">
+              <span className="text-muted">{copy.location}</span>
+              <input
+                className="w-full rounded-2xl border border-border bg-panelAlt px-3 py-2.5 text-sm outline-none focus:border-accent"
+                value={location}
+                onChange={(event) => setLocation(event.target.value)}
+                placeholder={copy.location}
+                disabled={readOnly}
+              />
+            </label>
+
+            <div className="flex gap-2">
+              <Button type="submit" disabled={readOnly}>
+                {editingId ? copy.save : copy.create}
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => setFormOpen(false)}>
                 {copy.cancel}
               </Button>
-            ) : null}
-          </div>
-        </form>
-      </Panel>
+            </div>
+          </form>
+        </Panel>
+      )}
 
       <Panel className="border-[#d6d0b8] bg-[#f8f6ea]">
         <div className="w-full overflow-x-auto">
@@ -255,36 +287,45 @@ export function SparePartsPageClient({ initialSpareParts }: SparePartsPageClient
                 <th className="px-4 py-2 text-left align-middle">{copy.name}</th>
                 <th className="px-4 py-2 text-left align-middle">{copy.stock}</th>
                 <th className="px-4 py-2 text-left align-middle">{copy.minStock}</th>
+                <th className="px-4 py-2 text-left align-middle">{copy.unit}</th>
                 <th className="px-4 py-2 text-left align-middle">{copy.location}</th>
                 <th className="px-4 py-2 text-right align-middle">{copy.actions}</th>
               </tr>
             </thead>
 
             <tbody className="divide-y divide-border">
-              {spareParts.map((part) => (
-                <tr key={part.id}>
-                  <td className="px-4 py-2 text-left align-middle">{part.name}</td>
-                  <td className="px-4 py-2 text-left align-middle">{part.stock}</td>
-                  <td className="px-4 py-2 text-left align-middle">{part.minStock}</td>
-                  <td className="px-4 py-2 text-left align-middle">{part.location}</td>
-                  <td className="px-4 py-2 text-right align-middle">
-                    {readOnly ? (
-                      <span className="text-xs text-muted">Read only</span>
-                    ) : (
-                      <div className="flex justify-end gap-2">
-                        <Button onClick={() => handleEdit(part)}>{copy.edit}</Button>
-                        <Button variant="danger" onClick={() => handleDelete(part.id)}>
-                          {copy.remove}
-                        </Button>
-                      </div>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {spareParts.map((part) => {
+                const lowStock = part.stock <= part.minStock && part.minStock > 0;
+                return (
+                  <tr key={part.id}>
+                    <td className="px-4 py-2 text-left align-middle">{part.name}</td>
+                    <td className={`px-4 py-2 text-left align-middle ${lowStock ? "text-danger font-semibold" : ""}`}>
+                      {part.stock} {part.unit}
+                    </td>
+                    <td className="px-4 py-2 text-left align-middle">
+                      {part.minStock} {part.unit}
+                    </td>
+                    <td className="px-4 py-2 text-left align-middle">{part.unit}</td>
+                    <td className="px-4 py-2 text-left align-middle">{part.location}</td>
+                    <td className="px-4 py-2 text-right align-middle">
+                      {readOnly ? (
+                        <span className="text-xs text-muted">Read only</span>
+                      ) : (
+                        <div className="flex justify-end gap-2">
+                          <Button onClick={() => handleEdit(part)}>{copy.edit}</Button>
+                          <Button variant="danger" onClick={() => handleDelete(part.id)}>
+                            {copy.remove}
+                          </Button>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
 
               {spareParts.length === 0 && (
                 <tr>
-                  <td colSpan={5} className="py-6 text-center text-muted">
+                  <td colSpan={6} className="py-6 text-center text-muted">
                     {copy.empty}
                   </td>
                 </tr>

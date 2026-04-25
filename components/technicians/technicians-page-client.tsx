@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
@@ -15,17 +15,21 @@ type Technician = {
   id: string;
   name: string;
   specialty: string;
+  phone: string;
+  hireDate: string;
 };
 
 type TechniciansPageClientProps = {
   initialTechnicians: Technician[];
 };
 
-function mapTechnician(row: { id: string; name: string | null; skill: string | null }): Technician {
+function mapTechnician(row: { id: string; name: string | null; skill: string | null; phone: string | null; hire_date: string | null }): Technician {
   return {
     id: row.id,
     name: row.name ?? "",
-    specialty: row.skill ?? ""
+    specialty: row.skill ?? "",
+    phone: row.phone ?? "",
+    hireDate: row.hire_date ?? ""
   };
 }
 
@@ -37,6 +41,9 @@ export function TechniciansPageClient({ initialTechnicians }: TechniciansPageCli
   const [technicians, setTechnicians] = useState<Technician[]>(initialTechnicians);
   const [name, setName] = useState("");
   const [specialty, setSpecialty] = useState("");
+  const [phone, setPhone] = useState("");
+  const [hireDate, setHireDate] = useState("");
+  const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const canMutate = canEditModule(user?.role, "technicians");
   const readOnly = !canMutate;
@@ -51,11 +58,12 @@ export function TechniciansPageClient({ initialTechnicians }: TechniciansPageCli
           cancel: "Cancel",
           name: "Name",
           specialty: "Specialty",
+          phone: "Phone",
+          hireDate: "Hire date",
           actions: "Actions",
           edit: "Edit",
           remove: "Delete",
-          empty: "No technicians",
-          tempPassword: "Temporary password: 12345"
+          empty: "No technicians"
         }
       : {
           registry: "Registro de Técnicos",
@@ -65,11 +73,12 @@ export function TechniciansPageClient({ initialTechnicians }: TechniciansPageCli
           cancel: "Cancelar",
           name: "Nombre",
           specialty: "Especialidad",
+          phone: "Teléfono",
+          hireDate: "Fecha de ingreso",
           actions: "Acciones",
           edit: "Editar",
           remove: "Eliminar",
-          empty: "No hay técnicos registrados",
-          tempPassword: "Contrasena temporal: 12345"
+          empty: "No hay técnicos registrados"
         };
 
   useEffect(() => {
@@ -94,7 +103,10 @@ export function TechniciansPageClient({ initialTechnicians }: TechniciansPageCli
   const resetForm = () => {
     setName("");
     setSpecialty("");
+    setPhone("");
+    setHireDate("");
     setEditingId(null);
+    setFormOpen(false);
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -109,11 +121,23 @@ export function TechniciansPageClient({ initialTechnicians }: TechniciansPageCli
     if (editingId) {
       await supabase
         .from("technicians")
-        .update({ name: trimmedName, skill: trimmedSpecialty, company_id: companyIdForWrite })
+        .update({
+          name: trimmedName,
+          skill: trimmedSpecialty,
+          phone: phone.trim() || null,
+          hire_date: hireDate || null,
+          company_id: companyIdForWrite
+        })
         .eq("id", editingId)
         .eq("company_id", activeCompanyId);
     } else {
-      await supabase.from("technicians").insert([{ name: trimmedName, skill: trimmedSpecialty, company_id: companyIdForWrite }]);
+      await supabase.from("technicians").insert([{
+        name: trimmedName,
+        skill: trimmedSpecialty,
+        phone: phone.trim() || null,
+        hire_date: hireDate || null,
+        company_id: companyIdForWrite
+      }]);
       await ensureTechnicianAdminUser(trimmedName);
     }
 
@@ -127,6 +151,10 @@ export function TechniciansPageClient({ initialTechnicians }: TechniciansPageCli
     setEditingId(technician.id);
     setName(technician.name);
     setSpecialty(technician.specialty);
+    setPhone(technician.phone);
+    setHireDate(technician.hireDate);
+    setFormOpen(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const handleDelete = async (id: string) => {
@@ -145,43 +173,56 @@ export function TechniciansPageClient({ initialTechnicians }: TechniciansPageCli
             <h1 className="text-3xl font-semibold">{copy.title}</h1>
           </div>
 
-          {canMutate ? <Button onClick={resetForm}>{copy.create}</Button> : null}
+          {canMutate ? <Button onClick={() => { resetForm(); setFormOpen(true); }}>{copy.create}</Button> : null}
         </div>
       </Panel>
 
-      <Panel className="p-4 border-[#d6d0b8] bg-[#f8f6ea]">
-        <p className="text-sm text-muted">{copy.tempPassword ?? "Temporary password: 12345"}</p>
-      </Panel>
+      {formOpen && (
+        <Panel className="p-6 border-[#d6d0b8] bg-[#f8f6ea]">
+          <form className="grid gap-4 md:grid-cols-[1fr_1fr_1fr_1fr_auto_auto]" onSubmit={handleSubmit}>
+            <input
+              className="rounded-2xl border border-border px-3 py-2"
+              placeholder={copy.name}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              disabled={readOnly}
+            />
 
-      <Panel className="p-6 border-[#d6d0b8] bg-[#f8f6ea]">
-        <form className="grid gap-4 md:grid-cols-[1fr_1fr_auto_auto]" onSubmit={handleSubmit}>
-          <input
-            className="rounded-2xl border border-border px-3 py-2"
-            placeholder={copy.name}
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            disabled={readOnly}
-          />
+            <input
+              className="rounded-2xl border border-border px-3 py-2"
+              placeholder={copy.specialty}
+              value={specialty}
+              onChange={(event) => setSpecialty(event.target.value)}
+              disabled={readOnly}
+            />
 
-          <input
-            className="rounded-2xl border border-border px-3 py-2"
-            placeholder={copy.specialty}
-            value={specialty}
-            onChange={(event) => setSpecialty(event.target.value)}
-            disabled={readOnly}
-          />
+            <input
+              className="rounded-2xl border border-border px-3 py-2"
+              placeholder={copy.phone}
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              disabled={readOnly}
+            />
 
-          <Button type="submit" disabled={readOnly}>
-            {editingId ? copy.save : copy.create}
-          </Button>
+            <input
+              className="rounded-2xl border border-border px-3 py-2"
+              type="date"
+              value={hireDate}
+              onChange={(event) => setHireDate(event.target.value)}
+              disabled={readOnly}
+              title={copy.hireDate}
+            />
 
-          {editingId ? (
-            <Button type="button" variant="secondary" onClick={resetForm}>
+            <Button type="submit" disabled={readOnly}>
+              {editingId ? copy.save : copy.create}
+            </Button>
+
+            <Button type="button" variant="secondary" onClick={() => setFormOpen(false)}>
               {copy.cancel}
             </Button>
-          ) : null}
-        </form>
-      </Panel>
+          </form>
+        </Panel>
+      )}
 
       <Panel className="border-[#d6d0b8] bg-[#f8f6ea]">
         <div className="w-full overflow-x-auto">
@@ -190,6 +231,8 @@ export function TechniciansPageClient({ initialTechnicians }: TechniciansPageCli
               <tr>
                 <th className="px-4 py-2 text-left align-middle">{copy.name}</th>
                 <th className="px-4 py-2 text-left align-middle">{copy.specialty}</th>
+                <th className="px-4 py-2 text-left align-middle">{copy.phone}</th>
+                <th className="px-4 py-2 text-left align-middle">{copy.hireDate}</th>
                 <th className="px-4 py-2 text-right align-middle">{copy.actions}</th>
               </tr>
             </thead>
@@ -199,6 +242,8 @@ export function TechniciansPageClient({ initialTechnicians }: TechniciansPageCli
                 <tr key={technician.id}>
                   <td className="px-4 py-2 text-left align-middle">{technician.name}</td>
                   <td className="px-4 py-2 text-left align-middle">{technician.specialty}</td>
+                  <td className="px-4 py-2 text-left align-middle">{technician.phone || "-"}</td>
+                  <td className="px-4 py-2 text-left align-middle">{technician.hireDate || "-"}</td>
                   <td className="px-4 py-2 text-right align-middle">
                     {readOnly ? (
                       <span className="text-xs text-muted">Read only</span>
@@ -216,7 +261,7 @@ export function TechniciansPageClient({ initialTechnicians }: TechniciansPageCli
 
               {sortedTechnicians.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="text-center py-6 text-muted">
+                  <td colSpan={5} className="text-center py-6 text-muted">
                     {copy.empty}
                   </td>
                 </tr>
@@ -237,7 +282,6 @@ async function ensureTechnicianAdminUser(technicianName: string) {
   if (existing) return;
 
   const role = normalizedUsername === GOD_USERNAME ? "god" : "technician";
-  console.log("ROLE:", role);
 
   const preferredInsert = await supabase.from("admins").insert([
     {

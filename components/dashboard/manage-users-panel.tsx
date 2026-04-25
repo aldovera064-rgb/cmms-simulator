@@ -14,6 +14,7 @@ import {
   normalizeRole,
   normalizeUsername
 } from "@/lib/rbac";
+import { useI18n } from "@/lib/i18n/context";
 import { useSession } from "@/lib/session/context";
 import { supabase } from "@/lib/supabase";
 
@@ -25,6 +26,7 @@ type AdminUser = {
 };
 
 export function ManageUsersPanel() {
+  const { locale } = useI18n();
   const { user } = useSession();
   const actorRole = normalizeRole(user?.role);
   const activeCompanyId = user?.activeCompanyId ?? null;
@@ -39,6 +41,57 @@ export function ManageUsersPanel() {
   const [addExistingLoading, setAddExistingLoading] = useState(false);
   const [addExistingMessage, setAddExistingMessage] = useState("");
   const canAccessPanel = canEditModule(user?.role, "manage_users");
+
+  const copy =
+    locale === "en"
+      ? {
+          accessControl: "Access Control",
+          manageUsers: "Manage Users",
+          subtitleActive: "New users are assigned to the active company.",
+          subtitleInactive: "Select an active company to assign users.",
+          usernamePlaceholder: "username",
+          passwordPlaceholder: "password",
+          createButton: "Create",
+          addExistingLabel: "Add existing user to this company",
+          existingUsernamePlaceholder: "existing username",
+          addButton: "Add to company",
+          userNotFound: "User not found.",
+          userAlreadyInCompany: "User already belongs to this company.",
+          userAdded: "User successfully added.",
+          usernameHeader: "Username",
+          roleHeader: "Role",
+          actionsHeader: "Actions",
+          saveName: "Save name",
+          cancel: "Cancel",
+          editName: "Edit name",
+          delete: "Delete",
+          removeFromCompany: "Remove from company",
+          locked: "Locked"
+        }
+      : {
+          accessControl: "Control de Acceso",
+          manageUsers: "Administrar usuarios",
+          subtitleActive: "Los nuevos usuarios se asignan a la empresa activa.",
+          subtitleInactive: "Selecciona una empresa activa para asignar usuarios.",
+          usernamePlaceholder: "usuario",
+          passwordPlaceholder: "contraseña",
+          createButton: "Crear",
+          addExistingLabel: "Agregar usuario existente a esta empresa",
+          existingUsernamePlaceholder: "usuario existente",
+          addButton: "Agregar a empresa",
+          userNotFound: "Usuario no encontrado.",
+          userAlreadyInCompany: "El usuario ya pertenece a esta empresa.",
+          userAdded: "Usuario agregado correctamente.",
+          usernameHeader: "Usuario",
+          roleHeader: "Rol",
+          actionsHeader: "Acciones",
+          saveName: "Guardar nombre",
+          cancel: "Cancelar",
+          editName: "Editar nombre",
+          delete: "Eliminar",
+          removeFromCompany: "Quitar de empresa",
+          locked: "Bloqueado"
+        };
 
   async function loadUsers() {
     if (!activeCompanyId) {
@@ -205,7 +258,7 @@ export function ManageUsersPanel() {
       .maybeSingle();
 
     if (!found) {
-      setAddExistingMessage("Usuario no encontrado.");
+      setAddExistingMessage(copy.userNotFound);
       setAddExistingLoading(false);
       return;
     }
@@ -219,7 +272,7 @@ export function ManageUsersPanel() {
       .maybeSingle();
 
     if (existing) {
-      setAddExistingMessage("El usuario ya pertenece a esta empresa.");
+      setAddExistingMessage(copy.userAlreadyInCompany);
       setAddExistingLoading(false);
       return;
     }
@@ -231,7 +284,7 @@ export function ManageUsersPanel() {
     if (error) {
       setAddExistingMessage("Error: " + error.message);
     } else {
-      setAddExistingMessage("Usuario agregado correctamente.");
+      setAddExistingMessage(copy.userAdded);
       setExistingUsername("");
       await loadUsers();
     }
@@ -244,23 +297,23 @@ export function ManageUsersPanel() {
     <Panel className="p-6 border-[#d6d0b8] bg-[#f8f6ea]">
       <div className="space-y-4">
         <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-accent">Access Control</p>
-          <h2 className="mt-2 text-xl font-semibold">Administrar usuarios</h2>
+          <p className="text-xs uppercase tracking-[0.2em] text-accent">{copy.accessControl}</p>
+          <h2 className="mt-2 text-xl font-semibold">{copy.manageUsers}</h2>
           <p className="mt-2 text-sm text-muted">
-            {activeCompanyId ? "Los nuevos usuarios se asignan a la empresa activa." : "Selecciona una empresa activa para asignar usuarios."}
+            {activeCompanyId ? copy.subtitleActive : copy.subtitleInactive}
           </p>
         </div>
 
         <form className="grid gap-3 md:grid-cols-[1fr_180px_170px_auto]" onSubmit={handleCreate}>
           <input
             className="rounded-2xl border border-border bg-panelAlt px-3 py-2 text-sm"
-            placeholder="username"
+            placeholder={copy.usernamePlaceholder}
             value={username}
             onChange={(event) => setUsername(event.target.value)}
           />
           <input
             className="rounded-2xl border border-border bg-panelAlt px-3 py-2 text-sm"
-            placeholder="password"
+            placeholder={copy.passwordPlaceholder}
             value={password}
             onChange={(event) => setPassword(event.target.value)}
           />
@@ -276,22 +329,22 @@ export function ManageUsersPanel() {
             ))}
           </select>
           <Button type="submit" disabled={loading || creatableRoles.length === 0}>
-            Create
+            {copy.createButton}
           </Button>
         </form>
 
         <div className="grid gap-3 md:grid-cols-[1fr_auto] items-end">
           <div className="space-y-1">
-            <label className="text-xs text-muted">Agregar usuario existente a esta empresa</label>
+            <label className="text-xs text-muted">{copy.addExistingLabel}</label>
             <input
               className="w-full rounded-2xl border border-border bg-panelAlt px-3 py-2 text-sm"
-              placeholder="username existente"
+              placeholder={copy.existingUsernamePlaceholder}
               value={existingUsername}
               onChange={(event) => { setExistingUsername(event.target.value); setAddExistingMessage(""); }}
             />
           </div>
           <Button type="button" disabled={addExistingLoading || !existingUsername.trim()} onClick={() => void handleAddExistingUser()}>
-            {addExistingLoading ? "..." : "Agregar a empresa"}
+            {addExistingLoading ? "..." : copy.addButton}
           </Button>
         </div>
         {addExistingMessage ? <p className="text-xs text-muted">{addExistingMessage}</p> : null}
@@ -300,9 +353,9 @@ export function ManageUsersPanel() {
           <table className="table-auto w-full border-collapse divide-y divide-border text-sm">
             <thead className="bg-[#f5f5dc] text-xs uppercase text-muted">
               <tr>
-                <th className="px-4 py-2 text-left">Username</th>
-                <th className="px-4 py-2 text-left">Role</th>
-                <th className="px-4 py-2 text-right">Actions</th>
+                <th className="px-4 py-2 text-left">{copy.usernameHeader}</th>
+                <th className="px-4 py-2 text-left">{copy.roleHeader}</th>
+                <th className="px-4 py-2 text-right">{copy.actionsHeader}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -345,23 +398,23 @@ export function ManageUsersPanel() {
                         {actorRole === "god" && entry.username !== user?.name ? (
                           editingUserId === entry.id ? (
                             <>
-                              <Button onClick={() => void saveUsername(entry)}>Save name</Button>
+                              <Button onClick={() => void saveUsername(entry)}>{copy.saveName}</Button>
                               <Button variant="secondary" onClick={() => setEditingUserId(null)}>
-                                Cancel
+                                {copy.cancel}
                               </Button>
                             </>
                           ) : (
                             <Button variant="secondary" onClick={() => startEditUsername(entry)}>
-                              Edit name
+                              {copy.editName}
                             </Button>
                           )
                         ) : null}
                         {canMutateRole ? (
                           <Button variant="danger" onClick={() => void handleDelete(entry)}>
-                            {actorRole === "god" ? "Eliminar" : "Quitar de empresa"}
+                            {actorRole === "god" ? copy.delete : copy.removeFromCompany}
                           </Button>
                         ) : (
-                          <span className="text-xs text-muted">Locked</span>
+                          <span className="text-xs text-muted">{copy.locked}</span>
                         )}
                       </div>
                     </td>

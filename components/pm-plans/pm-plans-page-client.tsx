@@ -1,11 +1,11 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import { applyCompanyFilter, getScopedCompanyId } from "@/lib/company";
-import { ensureSeedData, fetchAssets } from "@/lib/cmms-data";
+import { ensureSeedData, fetchAssets, fetchPmPlanHistory, type PmPlanHistoryRow } from "@/lib/cmms-data";
 import { useI18n } from "@/lib/i18n/context";
 import { canEditModule, isReadOnlyRole } from "@/lib/rbac";
 import { useSession } from "@/lib/session/context";
@@ -28,6 +28,7 @@ type PMPlanRow = {
   last_run: string | null;
   next_run: string | null;
   created_at: string | null;
+  is_active?: boolean | null;
 };
 
 type PMPlansPageClientProps = {
@@ -75,6 +76,7 @@ function mapPlan(row: PMPlanRow): PMPlan | null {
 async function fetchPlans(activeCompanyId?: string | null) {
   let query = supabase.from("pm_plans").select("*");
   query = applyCompanyFilter(query, activeCompanyId);
+  query = query.eq("is_active", true);
   const { data } = await query.order("next_run", { ascending: true });
   const rows = (data ?? []) as PMPlanRow[];
   return rows.map(mapPlan).filter((plan): plan is PMPlan => Boolean(plan));
@@ -123,16 +125,24 @@ async function autoGenerateWorkOrders(plans: PMPlan[], assets: AssetOption[], ac
   await supabase.from("work_orders").insert(generatedOrders);
 
   await Promise.all(
-    duePlans.map((plan) =>
-      supabase
+    duePlans.map((plan) => {
+      const nextRunDate = parseDateOnly(plan.nextRun) ?? today;
+      return supabase
         .from("pm_plans")
         .update({
-          last_run: todayIso,
-          next_run: toDateOnlyISO(addDays(today, plan.frequency))
+          last_run: toDateOnlyISO(nextRunDate),
+          next_run: toDateOnlyISO(addDays(nextRunDate, plan.frequency))
         })
-        .eq("id", plan.id)
-    )
+        .eq("id", plan.id);
+    })
   );
+}
+
+function formatHistoryDate(value: string) {
+  return new Intl.DateTimeFormat("es-MX", {
+    dateStyle: "medium",
+    timeStyle: "short"
+  }).format(new Date(value));
 }
 
 export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
@@ -142,46 +152,66 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
   const companyIdForWrite = getScopedCompanyId(activeCompanyId);
   const [plans, setPlans] = useState<PMPlan[]>(initialPlans);
   const [assets, setAssets] = useState<AssetOption[]>([]);
+  const [history, setHistory] = useState<PmPlanHistoryRow[]>([]);
+  const [usersMap, setUsersMap] = useState<Record<string, string>>({});
+  const [showHistory, setShowHistory] = useState(false);
   const [assetId, setAssetId] = useState("");
   const [name, setName] = useState("");
   const [frequency, setFrequency] = useState("");
   const [nextRunDate, setNextRunDate] = useState("");
+  const [formOpen, setFormOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [dateError, setDateError] = useState("");
   const canMutate = canEditModule(user?.role, "pm_plans");
   const readOnly = isReadOnlyRole(user?.role);
 
   const copy =
     locale === "en"
       ? {
-          title: "PM Plans",
-          subtitle: "CMMS system for industrial maintenance management.",
-          createPlan: "Create PM plan",
+          sectionLabel: "Preventive Maintenance",
+          title: "Maintenance Plans",
+          subtitle: "Preventive scheduling for operational continuity.",
+          createPlan: "Create plan",
           asset: "Asset",
           selectAsset: "Select asset",
           planName: "Plan name",
           frequency: "Frequency (days)",
-          nextRun: "Next run",
+          nextRun: "Next execution",
           save: "Save",
           create: "Create",
           cancel: "Cancel",
           tablePlan: "Plan",
           tableAsset: "Asset",
           tableFrequency: "Frequency",
-          tableLastRun: "Last run",
-          tableNextRun: "Next run",
+          tableLastRun: "Last execution",
+          tableNextRun: "Next execution",
           tableStatus: "Status",
           tableActions: "Actions",
           overdue: "Overdue",
           upToDate: "On schedule",
           assetNotFound: "Asset not found",
-          empty: "No PM plans registered.",
+          empty: "No maintenance plans registered.",
           edit: "Edit",
-          remove: "Delete"
+          remove: "Delete",
+          historyTitle: "Maintenance Plan History",
+          historyToggle: "View history",
+          historyHide: "Hide history",
+          historyAction: "Action",
+          historyOriginalStatus: "Original status",
+          historyDate: "Date",
+          historyEmpty: "No history records",
+          historyDisclaimer: "History records are automatically deleted after 365 days.",
+          actionCreated: "Created",
+          actionCompleted: "Completed",
+          actionDeleted: "Deleted",
+          dateError: "Next execution must be after last execution",
+          complete: "Complete PM"
         }
       : {
-          title: "Planes PM",
+          sectionLabel: "Mantenimiento preventivo",
+          title: "Planes de mantenimiento",
           subtitle: "Programación preventiva para continuidad operativa.",
-          createPlan: "Crear plan PM",
+          createPlan: "Crear plan",
           asset: "Activo",
           selectAsset: "Seleccionar activo",
           planName: "Nombre del plan",
@@ -200,9 +230,22 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
           overdue: "Vencido",
           upToDate: "Al día",
           assetNotFound: "Activo no encontrado",
-          empty: "No hay planes PM registrados.",
+          empty: "No hay planes de mantenimiento registrados.",
           edit: "Editar",
-          remove: "Eliminar"
+          remove: "Eliminar",
+          historyTitle: "Historial de planes de mantenimiento",
+          historyToggle: "Ver historial",
+          historyHide: "Ocultar historial",
+          historyAction: "Acción",
+          historyOriginalStatus: "Estado original",
+          historyDate: "Fecha",
+          historyEmpty: "No hay registros de historial",
+          historyDisclaimer: "Los registros del historial se eliminan automáticamente después de 365 días.",
+          actionCreated: "Creado",
+          actionCompleted: "Completado",
+          actionDeleted: "Eliminado",
+          dateError: "La próxima ejecución debe ser posterior a la última ejecución",
+          complete: "Completar PM"
         };
 
   useEffect(() => {
@@ -210,6 +253,7 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
       if (!activeCompanyId) {
         setAssets([]);
         setPlans([]);
+        setHistory([]);
         return;
       }
 
@@ -227,10 +271,28 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
       await autoGenerateWorkOrders(nextPlans, nextAssets, activeCompanyId);
       nextPlans = await fetchPlans(activeCompanyId);
       setPlans(sortPlans(nextPlans));
+
+      const [historyRows, adminsData] = await Promise.all([
+        fetchPmPlanHistory(activeCompanyId),
+        supabase.from("admins").select("id, username")
+      ]);
+      setHistory(historyRows);
+
+      if (adminsData.data) {
+        const map: Record<string, string> = {};
+        adminsData.data.forEach((admin: any) => {
+          map[admin.id] = admin.username;
+        });
+        setUsersMap(map);
+      }
     };
 
     void load();
   }, [activeCompanyId]);
+
+  useEffect(() => {
+    setFrequency(localStorage.getItem("cmms_default_pm_freq") || "");
+  }, []);
 
   const assetsById = useMemo(() => {
     return new Map(assets.map((asset) => [asset.id, asset]));
@@ -239,14 +301,43 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
   const resetForm = () => {
     setAssetId("");
     setName("");
-    setFrequency("");
+    setFrequency(localStorage.getItem("cmms_default_pm_freq") || "");
     setNextRunDate("");
     setEditingId(null);
+    setDateError("");
+    setFormOpen(false);
   };
+
+  /** Save PM plan snapshot to history table */
+  async function savePmPlanSnapshot(planId: string, actionType: "created" | "completed" | "deleted" | "updated", statusOriginal: string) {
+    if (!activeCompanyId || !user?.id) {
+      console.error("Missing user_id");
+      return;
+    }
+
+    const { data } = await supabase.from("pm_plans").select("*").eq("id", planId).maybeSingle();
+    if (!data) return;
+
+    const { error } = await supabase.from("pm_plan_history").insert([
+      {
+        pm_plan_id: planId,
+        snapshot: data,
+        action_type: actionType,
+        status_original: statusOriginal,
+        company_id: activeCompanyId,
+        user_id: user.id
+      }
+    ]);
+
+    if (error) {
+      console.error("History insert error:", error);
+    }
+  }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     if (!canMutate || !activeCompanyId) return;
     event.preventDefault();
+    setDateError("");
 
     const trimmedName = name.trim();
     const parsedFrequency = Number(frequency);
@@ -254,6 +345,18 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
 
     if (!assetId || !trimmedName || !parsedNextRun) return;
     if (!Number.isFinite(parsedFrequency) || parsedFrequency <= 0) return;
+
+    // Validation: next_execution must be > last_execution when editing
+    if (editingId) {
+      const currentPlan = plans.find((p) => p.id === editingId);
+      if (currentPlan?.lastRun) {
+        const lastRunDate = parseDateOnly(currentPlan.lastRun);
+        if (lastRunDate && parsedNextRun <= lastRunDate) {
+          setDateError(copy.dateError);
+          return;
+        }
+      }
+    }
 
     const payload = {
       asset_id: assetId,
@@ -265,7 +368,10 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
     if (editingId) {
       await supabase.from("pm_plans").update(payload).eq("id", editingId).eq("company_id", activeCompanyId);
     } else {
-      await supabase.from("pm_plans").insert([{ ...payload, last_run: null, company_id: companyIdForWrite }]);
+      const { data, error } = await supabase.from("pm_plans").insert([{ ...payload, last_run: null, company_id: companyIdForWrite }]).select("id").single();
+      if (!error && data) {
+        await savePmPlanSnapshot(data.id, "created", "active");
+      }
     }
 
     const nextPlans = await fetchPlans(activeCompanyId);
@@ -280,16 +386,60 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
     setName(plan.name);
     setFrequency(String(plan.frequency));
     setNextRunDate(toDateInputValue(plan.nextRun));
+    setDateError("");
+    setFormOpen(true);
   };
 
   const handleDelete = async (planId: string) => {
     if (!canMutate) return;
-    await supabase.from("pm_plans").delete().eq("id", planId).eq("company_id", activeCompanyId);
-    setPlans((current) => current.filter((plan) => plan.id !== planId));
+
+    // Save snapshot before soft delete
+    const plan = plans.find((p) => p.id === planId);
+    await savePmPlanSnapshot(planId, "deleted", plan ? "active" : "unknown");
+
+    // Soft delete
+    await supabase
+      .from("pm_plans")
+      .update({ is_active: false, deleted_at: new Date().toISOString() })
+      .eq("id", planId)
+      .eq("company_id", activeCompanyId);
+
+    setPlans((current) => current.filter((p) => p.id !== planId));
 
     if (editingId === planId) {
       resetForm();
     }
+
+    // Refresh history
+    const historyRows = await fetchPmPlanHistory(activeCompanyId);
+    setHistory(historyRows);
+  };
+
+  const handleComplete = async (plan: PMPlan) => {
+    if (!canMutate || !activeCompanyId) return;
+    
+    // Save snapshot before complete
+    await savePmPlanSnapshot(plan.id, "completed", "active");
+
+    const today = new Date();
+    const last_execution = today;
+    const next_execution = addDays(last_execution, plan.frequency);
+    
+    await supabase
+      .from("pm_plans")
+      .update({ 
+        last_execution, 
+        next_execution 
+      })
+      .eq("id", plan.id)
+      .eq("company_id", activeCompanyId);
+
+    const nextPlans = await fetchPlans(activeCompanyId);
+    setPlans(sortPlans(nextPlans));
+
+    // Refresh history
+    const historyRows = await fetchPmPlanHistory(activeCompanyId);
+    setHistory(historyRows);
   };
 
   const today = startOfDay(new Date());
@@ -299,81 +449,89 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
       <Panel className="industrial-grid overflow-hidden p-8 border-[#d6d0b8]">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl space-y-3">
-            <p className="text-xs uppercase tracking-[0.28em] text-accent">Preventive Maintenance</p>
+            <p className="text-xs uppercase tracking-[0.28em] text-accent">{copy.sectionLabel}</p>
             <h1 className="text-3xl font-semibold tracking-tight">{copy.title}</h1>
             <p className="text-sm text-muted">{copy.subtitle}</p>
           </div>
 
-          {canMutate ? <Button onClick={resetForm}>{copy.createPlan}</Button> : null}
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => setShowHistory(!showHistory)}>
+              {showHistory ? copy.historyHide : copy.historyToggle}
+            </Button>
+            {canMutate ? <Button onClick={() => { resetForm(); setFormOpen(true); }}>{copy.createPlan}</Button> : null}
+          </div>
         </div>
       </Panel>
 
-      <Panel className="p-6 border-[#d6d0b8] bg-[#f8f6ea]">
-        <form className="grid gap-4 md:grid-cols-[1fr_1fr_160px_180px_auto] md:items-end" onSubmit={handleSubmit}>
-          <label className="space-y-2 text-sm">
-            <span className="text-muted">{copy.asset}</span>
-            <select
-              className="w-full rounded-2xl border border-border bg-panelAlt px-3 py-2.5 text-sm outline-none focus:border-accent"
-              value={assetId}
-              onChange={(event) => setAssetId(event.target.value)}
-              disabled={readOnly}
-            >
-              <option value="">{copy.selectAsset}</option>
-              {assets.map((asset) => (
-                <option key={asset.id} value={asset.id}>
-                  {asset.tag} - {asset.name}
-                </option>
-              ))}
-            </select>
-          </label>
+      {formOpen && (
+        <Panel className="p-6 border-[#d6d0b8] bg-[#f8f6ea]">
+          <form className="grid gap-4 md:grid-cols-[1fr_1fr_160px_180px_auto] md:items-end" onSubmit={handleSubmit}>
+            <label className="space-y-2 text-sm">
+              <span className="text-muted">{copy.asset}</span>
+              <select
+                className="w-full rounded-2xl border border-border bg-panelAlt px-3 py-2.5 text-sm outline-none focus:border-accent"
+                value={assetId}
+                onChange={(event) => setAssetId(event.target.value)}
+                disabled={readOnly}
+              >
+                <option value="">{copy.selectAsset}</option>
+                {assets.map((asset) => (
+                  <option key={asset.id} value={asset.id}>
+                    {asset.tag} - {asset.name}
+                  </option>
+                ))}
+              </select>
+            </label>
 
-          <label className="space-y-2 text-sm">
-            <span className="text-muted">{copy.planName}</span>
-            <input
-              className="w-full rounded-2xl border border-border bg-panelAlt px-3 py-2.5 text-sm outline-none focus:border-accent"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder={copy.planName}
-              disabled={readOnly}
-            />
-          </label>
+            <label className="space-y-2 text-sm">
+              <span className="text-muted">{copy.planName}</span>
+              <input
+                className="w-full rounded-2xl border border-border bg-panelAlt px-3 py-2.5 outline-none focus:border-accent"
+                placeholder="Ej. Revisión trimestral"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                disabled={readOnly}
+              />
+            </label>
 
-          <label className="space-y-2 text-sm">
-            <span className="text-muted">{copy.frequency}</span>
-            <input
-              className="w-full rounded-2xl border border-border bg-panelAlt px-3 py-2.5 text-sm outline-none focus:border-accent"
-              type="number"
-              min={1}
-              value={frequency}
-              onChange={(event) => setFrequency(event.target.value)}
-              placeholder="30"
-              disabled={readOnly}
-            />
-          </label>
+            <label className="space-y-2 text-sm">
+              <span className="text-muted">{copy.frequency}</span>
+              <input
+                type="number"
+                min="1"
+                className="w-full rounded-2xl border border-border bg-panelAlt px-3 py-2.5 outline-none focus:border-accent"
+                value={frequency}
+                onChange={(event) => setFrequency(event.target.value)}
+                disabled={readOnly}
+              />
+            </label>
 
-          <label className="space-y-2 text-sm">
-            <span className="text-muted">{copy.nextRun}</span>
-            <input
-              className="w-full rounded-2xl border border-border bg-panelAlt px-3 py-2.5 text-sm outline-none focus:border-accent"
-              type="date"
-              value={nextRunDate}
-              onChange={(event) => setNextRunDate(event.target.value)}
-              disabled={readOnly}
-            />
-          </label>
+            <label className="space-y-2 text-sm">
+              <span className="text-muted">{copy.nextRun}</span>
+              <input
+                type="date"
+                className="w-full rounded-2xl border border-border bg-panelAlt px-3 py-2.5 outline-none focus:border-accent"
+                value={nextRunDate}
+                onChange={(event) => {
+                  setNextRunDate(event.target.value);
+                  setDateError("");
+                }}
+                disabled={readOnly}
+              />
+            </label>
 
-          <div className="flex gap-2">
-            <Button type="submit" disabled={readOnly}>
-              {editingId ? copy.save : copy.create}
-            </Button>
-            {editingId ? (
-              <Button type="button" variant="secondary" onClick={resetForm}>
+            <div className="flex gap-2">
+              <Button type="submit" disabled={readOnly}>
+                {editingId ? copy.save : copy.create}
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => setFormOpen(false)}>
                 {copy.cancel}
               </Button>
-            ) : null}
-          </div>
-        </form>
-      </Panel>
+            </div>
+          </form>
+          {dateError && <p className="mt-2 text-sm text-danger">{dateError}</p>}
+        </Panel>
+      )}
 
       <Panel className="border-[#d6d0b8] bg-[#f8f6ea]">
         <div className="w-full overflow-x-auto">
@@ -394,7 +552,7 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
               {plans.map((plan) => {
                 const asset = assetsById.get(plan.assetId);
                 const nextRun = parseDateOnly(plan.nextRun);
-                const overdue = Boolean(nextRun && nextRun < today);
+                const overdue = Boolean(nextRun && nextRun <= today);
 
                 return (
                   <tr key={plan.id}>
@@ -415,6 +573,9 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
                         <span className="text-xs text-muted">Read only</span>
                       ) : (
                         <div className="flex justify-end gap-2">
+                          <Button variant="secondary" onClick={() => handleComplete(plan)}>
+                            {copy.complete}
+                          </Button>
                           <Button onClick={() => handleEdit(plan)}>{copy.edit}</Button>
                           <Button variant="danger" onClick={() => handleDelete(plan.id)}>
                             {copy.remove}
@@ -437,6 +598,77 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
           </table>
         </div>
       </Panel>
+
+      {/* ── HISTORIAL DE PM ────────────────────────────────── */}
+      {showHistory && (
+        <Panel className="border-[#d6d0b8] bg-[#f8f6ea]">
+          <div className="p-5">
+            <h2 className="text-lg font-semibold mb-4">{copy.historyTitle}</h2>
+          </div>
+          <div className="w-full overflow-x-auto">
+            <table className="table-auto w-full border-collapse divide-y divide-border text-sm">
+              <thead className="bg-[#f5f5dc] text-xs uppercase text-muted">
+                <tr>
+                  <th className="px-4 py-2 text-left align-middle">{copy.tablePlan}</th>
+                  <th className="px-4 py-2 text-left align-middle">{copy.tableAsset}</th>
+                  <th className="px-4 py-2 text-left align-middle">{copy.tableFrequency}</th>
+                  <th className="px-4 py-2 text-left align-middle">Usuario</th>
+                  <th className="px-4 py-2 text-left align-middle">{copy.historyOriginalStatus}</th>
+                  <th className="px-4 py-2 text-left align-middle">{copy.historyAction}</th>
+                  <th className="px-4 py-2 text-left align-middle">{copy.historyDate}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {history.map((record) => {
+                  const snap = record.snapshot as Record<string, unknown>;
+                  return (
+                    <tr key={record.id}>
+                      <td className="px-4 py-2 text-left align-middle">{snap.name as string ?? "-"}</td>
+                      <td className="px-4 py-2 text-left align-middle">
+                        {(snap.asset_id as string)?.slice(0, 6)?.toUpperCase() ?? "-"}
+                      </td>
+                      <td className="px-4 py-2 text-left align-middle">{(snap.frequency as number) ?? "-"}</td>
+                      <td className="px-4 py-2 text-left align-middle">{usersMap[record.user_id as string] || record.user_id || "-"}</td>
+                      <td className="px-4 py-2 text-left align-middle">{record.status_original ?? "-"}</td>
+                      <td className="px-4 py-2 text-left align-middle">
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-medium ${
+                            record.action_type === "created"
+                              ? "bg-success/20 text-success"
+                              : record.action_type === "completed"
+                              ? "bg-[#0ea5e9]/20 text-[#0ea5e9]"
+                              : "bg-danger/20 text-danger"
+                          }`}
+                        >
+                          {record.action_type === "created"
+                            ? copy.actionCreated
+                            : record.action_type === "completed"
+                            ? copy.actionCompleted
+                            : copy.actionDeleted}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 text-left align-middle">
+                        {formatHistoryDate(record.created_at)}
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {history.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="py-6 text-center text-muted">
+                      {copy.historyEmpty}
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <div className="p-4 text-xs text-muted text-center border-t border-border">
+            {copy.historyDisclaimer}
+          </div>
+        </Panel>
+      )}
     </div>
   );
 }
@@ -453,8 +685,16 @@ function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
+/** Parse date string with timezone-safe approach to prevent -1 day bug */
 function parseDateOnly(value: string | null) {
   if (!value) return null;
+
+  // If it's a date-only string (YYYY-MM-DD), append T00:00:00 to prevent timezone shift
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const base = new Date(value + "T00:00:00");
+    if (Number.isNaN(base.getTime())) return null;
+    return startOfDay(base);
+  }
 
   const base = new Date(value);
   if (Number.isNaN(base.getTime())) return null;

@@ -1,4 +1,4 @@
-﻿import { Dictionary, Locale } from "@/types/i18n";
+import { Dictionary, Locale } from "@/types/i18n";
 
 export const dictionaries: Record<Locale, Dictionary> = {
   es: {
@@ -10,7 +10,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       pmPlans: "Plan de Mantenimiento",
       spareParts: "Refacciones",
       technicians: "Técnicos",
-      generalNotes: "Bitácora general"
+      generalNotes: "Bitácora general",
+      settings: "Configuración"
     },
     auth: {
       title: "Ingreso al simulador",
@@ -44,7 +45,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       description: "Visibilidad en tiempo real del mantenimiento",
       assets: "Activos",
       workOrders: "Órdenes",
-      pmPlans: "Planes PM",
+      pmPlans: "Planes de mantenimiento",
       technicians: "Técnicos",
       foundationStatus: "Operación estable",
       foundationDescription: "Visibilidad en tiempo real del mantenimiento",
@@ -77,7 +78,8 @@ export const dictionaries: Record<Locale, Dictionary> = {
       pmPlans: "Maintenance Plan",
       spareParts: "Spare Parts",
       technicians: "Technicians",
-      generalNotes: "General logbook"
+      generalNotes: "General logbook",
+      settings: "Settings"
     },
     auth: {
       title: "Simulator sign in",

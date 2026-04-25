@@ -2,11 +2,13 @@
 
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
+import { useI18n } from "@/lib/i18n/context";
 import { isGod, isReadOnlyRole } from "@/lib/rbac";
 import { useSession } from "@/lib/session/context";
 import { supabase } from "@/lib/supabase";
 
 export function CompanyViewsPanel() {
+  const { locale } = useI18n();
   const { user, setActiveCompanyId } = useSession();
   const companies = user?.companies ?? [];
   const activeCompanyId = user?.activeCompanyId ?? null;
@@ -20,9 +22,36 @@ export function CompanyViewsPanel() {
     return null;
   }
 
+  const copy =
+    locale === "en"
+      ? {
+          viewsGod: "Views",
+          viewsAdmin: "View companies",
+          availableCompanies: "Available companies",
+          companyHeader: "Company",
+          roleHeader: "Role",
+          viewHeader: "View",
+          active: "Active",
+          enter: "Enter",
+          delete: "Delete",
+          confirmDelete: "Delete this company and all its assignments?"
+        }
+      : {
+          viewsGod: "Vistas",
+          viewsAdmin: "Ver empresas",
+          availableCompanies: "Empresas disponibles",
+          companyHeader: "Empresa",
+          roleHeader: "Rol",
+          viewHeader: "Vista",
+          active: "Activa",
+          enter: "Entrar",
+          delete: "Eliminar",
+          confirmDelete: "¿Eliminar esta empresa y todas sus asignaciones?"
+        };
+
   const handleDeleteCompany = async (companyId: string) => {
     if (!isGod(user?.role)) return;
-    if (!confirm("¿Eliminar esta empresa y todas sus asignaciones?")) return;
+    if (!confirm(copy.confirmDelete)) return;
     await supabase.from("user_companies").delete().eq("company_id", companyId);
     await supabase.from("companies").delete().eq("id", companyId);
     window.location.reload();
@@ -32,17 +61,17 @@ export function CompanyViewsPanel() {
     <Panel className="p-6 border-[#d6d0b8] bg-[#f8f6ea]">
       <div className="space-y-4">
         <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-accent">{user?.role === "god" ? "Vistas" : "Ver empresas"}</p>
-          <h2 className="mt-2 text-xl font-semibold">Empresas disponibles</h2>
+          <p className="text-xs uppercase tracking-[0.2em] text-accent">{user?.role === "god" ? copy.viewsGod : copy.viewsAdmin}</p>
+          <h2 className="mt-2 text-xl font-semibold">{copy.availableCompanies}</h2>
         </div>
 
         <div className="w-full overflow-x-auto">
           <table className="table-auto w-full border-collapse divide-y divide-border text-sm">
             <thead className="bg-[#f5f5dc] text-xs uppercase text-muted">
               <tr>
-                <th className="px-4 py-2 text-left">Empresa</th>
-                <th className="px-4 py-2 text-left">Rol</th>
-                <th className="px-4 py-2 text-right">Vista</th>
+                <th className="px-4 py-2 text-left">{copy.companyHeader}</th>
+                <th className="px-4 py-2 text-left">{copy.roleHeader}</th>
+                <th className="px-4 py-2 text-right">{copy.viewHeader}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -53,15 +82,15 @@ export function CompanyViewsPanel() {
                   <td className="px-4 py-2 text-right">
                     <div className="flex justify-end gap-2">
                       {company.id === activeCompanyId ? (
-                        <span className="text-xs text-muted">Activa</span>
+                        <span className="text-xs text-muted">{copy.active}</span>
                       ) : (
                         <Button variant="secondary" onClick={() => setActiveCompanyId(company.id)}>
-                          Entrar
+                          {copy.enter}
                         </Button>
                       )}
                       {isGod(user?.role) && company.id !== activeCompanyId ? (
                         <Button variant="danger" onClick={() => void handleDeleteCompany(company.id)}>
-                          Eliminar
+                          {copy.delete}
                         </Button>
                       ) : null}
                     </div>

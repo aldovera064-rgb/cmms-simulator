@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useMemo, useState } from "react";
 
@@ -151,9 +151,9 @@ export function WorkOrderFormModal({
               value={values.type}
               disabled={readOnly}
             >
-              <option value="CORRECTIVE">Correctivo</option>
-              <option value="PREVENTIVE">Preventivo</option>
-              <option value="PREDICTIVE">Predictivo</option>
+              <option value="CORRECTIVE">{locale === "en" ? "Corrective" : "Correctivo"}</option>
+              <option value="PREVENTIVE">{locale === "en" ? "Preventive" : "Preventivo"}</option>
+              <option value="PREDICTIVE">{locale === "en" ? "Predictive" : "Predictivo"}</option>
             </Select>
           </label>
 

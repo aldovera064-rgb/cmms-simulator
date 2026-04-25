@@ -42,6 +42,7 @@ export type WorkOrderRow = {
   qr_code: string | null;
   created_at: string | null;
   company_id?: string | null;
+  is_active?: boolean | null;
 };
 
 export type TechnicianRow = {
@@ -50,6 +51,8 @@ export type TechnicianRow = {
   skill: string | null;
   active: boolean | null;
   company_id?: string | null;
+  hire_date: string | null;
+  phone: string | null;
 };
 
 export type SparePartRow = {
@@ -58,7 +61,30 @@ export type SparePartRow = {
   stock: number | null;
   location: string | null;
   min_stock: number | null;
+  unit: string | null;
   company_id?: string | null;
+};
+
+export type WorkOrderHistoryRow = {
+  id: string;
+  work_order_id: string | null;
+  snapshot: Record<string, unknown>;
+  action_type: string;
+  status_original: string | null;
+  company_id: string | null;
+  user_id: string | null;
+  created_at: string;
+};
+
+export type PmPlanHistoryRow = {
+  id: string;
+  pm_plan_id: string | null;
+  snapshot: Record<string, unknown>;
+  action_type: string;
+  status_original: string | null;
+  company_id: string | null;
+  user_id: string | null;
+  created_at: string;
 };
 
 const ASSET_SEED: Array<Pick<AssetRow, "name" | "area" | "status" | "start_time">> = [
@@ -108,14 +134,24 @@ async function ensureTableSeed<TInsert extends object>(table: string, seed: TIns
   }
 }
 
-async function safeSelectOrdered<T>(table: string, orderBy: string, ascending: boolean, activeCompanyId?: string | null) {
+async function safeSelectOrdered<T>(table: string, orderBy: string, ascending: boolean, activeCompanyId?: string | null, extraFilters?: Record<string, unknown>) {
   let orderedQuery = supabase.from(table).select("*");
   orderedQuery = applyCompanyFilter(orderedQuery, activeCompanyId);
+  if (extraFilters) {
+    for (const [key, value] of Object.entries(extraFilters)) {
+      orderedQuery = orderedQuery.eq(key, value);
+    }
+  }
   const ordered = await orderedQuery.order(orderBy, { ascending });
   if (!ordered.error && ordered.data) return ordered.data as T[];
 
   let fallbackQuery = supabase.from(table).select("*");
   fallbackQuery = applyCompanyFilter(fallbackQuery, activeCompanyId);
+  if (extraFilters) {
+    for (const [key, value] of Object.entries(extraFilters)) {
+      fallbackQuery = fallbackQuery.eq(key, value as string);
+    }
+  }
   const fallback = await fallbackQuery;
   return (fallback.data ?? []) as T[];
 }
@@ -138,7 +174,7 @@ export async function fetchAssets(activeCompanyId?: string | null) {
 }
 
 export async function fetchWorkOrders(activeCompanyId?: string | null) {
-  return await safeSelectOrdered<WorkOrderRow>("work_orders", "created_at", false, activeCompanyId);
+  return await safeSelectOrdered<WorkOrderRow>("work_orders", "created_at", false, activeCompanyId, { is_active: true });
 }
 
 export async function fetchTechnicians(activeCompanyId?: string | null) {
@@ -147,4 +183,36 @@ export async function fetchTechnicians(activeCompanyId?: string | null) {
 
 export async function fetchSpareParts(activeCompanyId?: string | null) {
   return await safeSelectOrdered<SparePartRow>("spare_parts", "name", true, activeCompanyId);
+}
+
+export async function fetchWorkOrderHistory(activeCompanyId?: string | null) {
+  let query = supabase.from("work_order_history").select("*");
+  query = applyCompanyFilter(query, activeCompanyId);
+  const { data, error } = await query.order("created_at", { ascending: false });
+  if (error) {
+    console.error("fetchWorkOrderHistory error:", error);
+    return [];
+  }
+  return (data ?? []) as WorkOrderHistoryRow[];
+}
+
+export async function fetchPmPlanHistory(activeCompanyId?: string | null) {
+  let query = supabase.from("pm_plan_history").select("*");
+  query = applyCompanyFilter(query, activeCompanyId);
+  const { data, error } = await query.order("created_at", { ascending: false });
+  if (error) {
+    console.error("fetchPmPlanHistory error:", error);
+    return [];
+  }
+  return (data ?? []) as PmPlanHistoryRow[];
+}
+
+/** Client-side cleanup: delete history records older than 365 days. */
+export async function cleanupOldHistory() {
+  const cutoff = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
+
+  await Promise.all([
+    supabase.from("work_order_history").delete().lt("created_at", cutoff),
+    supabase.from("pm_plan_history").delete().lt("created_at", cutoff)
+  ]);
 }
