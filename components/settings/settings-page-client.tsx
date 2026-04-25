@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
@@ -26,7 +27,10 @@ const UNIT_GROUPS = {
 
 export function SettingsPageClient() {
   const { locale, setLocale } = useI18n();
+
   const [theme, setTheme] = useState("theme-default");
+  const [unitCategory, setUnitCategory] =
+    useState<keyof typeof UNIT_GROUPS>("count");
   const [unit, setUnit] = useState("piezas");
   const [freq, setFreq] = useState("30");
   const [timezone, setTimezone] = useState("UTC");
@@ -86,31 +90,42 @@ export function SettingsPageClient() {
         };
 
   useEffect(() => {
-    // Load from local storage
-    setTheme(localStorage.getItem("cmms_theme") || "theme-default");
+    const savedTheme = localStorage.getItem("cmms_theme") || "theme-default";
     const savedUnit = localStorage.getItem("cmms_default_unit") || "piezas";
+
+    setTheme(savedTheme);
     setUnit(savedUnit);
-    
-    // Find category for saved unit
+
+    // Detectar categoría automáticamente
+    let detectedCategory: keyof typeof UNIT_GROUPS = "count";
+
     for (const [cat, units] of Object.entries(UNIT_GROUPS)) {
       if (units.includes(savedUnit)) {
-        setUnitCategory(cat as keyof typeof UNIT_GROUPS);
+        detectedCategory = cat as keyof typeof UNIT_GROUPS;
         break;
       }
     }
+
+    setUnitCategory(detectedCategory);
+
     setFreq(localStorage.getItem("cmms_default_pm_freq") || "30");
     setTimezone(localStorage.getItem("cmms_timezone") || "UTC");
     setDateFormat(localStorage.getItem("cmms_date_format") || "YYYY-MM-DD");
+
+    // Aplicar tema al cargar
+    document.documentElement.classList.remove(...THEMES);
+    document.documentElement.classList.add(savedTheme);
   }, []);
 
   const handleSave = () => {
     localStorage.setItem("cmms_theme", theme);
     localStorage.setItem("cmms_default_unit", unit);
+    localStorage.setItem("cmms_unit_category", unitCategory);
     localStorage.setItem("cmms_default_pm_freq", freq);
     localStorage.setItem("cmms_timezone", timezone);
     localStorage.setItem("cmms_date_format", dateFormat);
 
-    // Apply theme globally
+    // Aplicar tema global
     document.documentElement.classList.remove(...THEMES);
     document.documentElement.classList.add(theme);
 
@@ -125,15 +140,19 @@ export function SettingsPageClient() {
     <div className="space-y-6">
       <Panel className="industrial-grid overflow-hidden p-8 border-[#d6d0b8]">
         <div className="space-y-3">
-          <p className="text-xs uppercase tracking-[0.28em] text-accent">Config</p>
-          <h1 className="text-3xl font-semibold tracking-tight">{copy.title}</h1>
+          <p className="text-xs uppercase tracking-[0.28em] text-accent">
+            Config
+          </p>
+          <h1 className="text-3xl font-semibold tracking-tight">
+            {copy.title}
+          </h1>
           <p className="text-sm text-muted">{copy.subtitle}</p>
         </div>
       </Panel>
 
       <Panel className="p-6 border-[#d6d0b8] bg-[#f8f6ea] max-w-2xl">
         <div className="space-y-6">
-          
+          {/* Idioma */}
           <label className="block space-y-2 text-sm">
             <span className="text-muted">{copy.language}</span>
             <select
@@ -146,6 +165,7 @@ export function SettingsPageClient() {
             </select>
           </label>
 
+          {/* Tema */}
           <label className="block space-y-2 text-sm">
             <span className="text-muted">{copy.theme}</span>
             <select
@@ -153,12 +173,15 @@ export function SettingsPageClient() {
               value={theme}
               onChange={(e) => setTheme(e.target.value)}
             >
-              {THEMES.map(t => (
-                <option key={t} value={t}>{copy.themes[t as keyof typeof copy.themes]}</option>
+              {THEMES.map((t) => (
+                <option key={t} value={t}>
+                  {copy.themes[t as keyof typeof copy.themes]}
+                </option>
               ))}
             </select>
           </label>
 
+          {/* Unidad */}
           <div className="grid grid-cols-2 gap-4">
             <label className="block space-y-2 text-sm">
               <span className="text-muted">{copy.unitCategory}</span>
@@ -166,13 +189,16 @@ export function SettingsPageClient() {
                 className="w-full rounded-2xl border border-border bg-panelAlt px-3 py-2.5 text-sm outline-none focus:border-accent"
                 value={unitCategory}
                 onChange={(e) => {
-                  const newCat = e.target.value as keyof typeof UNIT_GROUPS;
+                  const newCat =
+                    e.target.value as keyof typeof UNIT_GROUPS;
                   setUnitCategory(newCat);
                   setUnit(UNIT_GROUPS[newCat][0]);
                 }}
               >
-                {Object.keys(UNIT_GROUPS).map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
+                {Object.keys(UNIT_GROUPS).map((cat) => (
+                  <option key={cat} value={cat}>
+                    {cat}
+                  </option>
                 ))}
               </select>
             </label>
@@ -184,13 +210,16 @@ export function SettingsPageClient() {
                 value={unit}
                 onChange={(e) => setUnit(e.target.value)}
               >
-                {UNIT_GROUPS[unitCategory].map(u => (
-                  <option key={u} value={u}>{u}</option>
+                {UNIT_GROUPS[unitCategory].map((u) => (
+                  <option key={u} value={u}>
+                    {u}
+                  </option>
                 ))}
               </select>
             </label>
           </div>
 
+          {/* Frecuencia */}
           <label className="block space-y-2 text-sm">
             <span className="text-muted">{copy.defaultFreq}</span>
             <input
@@ -201,6 +230,7 @@ export function SettingsPageClient() {
             />
           </label>
 
+          {/* Zona horaria */}
           <label className="block space-y-2 text-sm">
             <span className="text-muted">{copy.timezone}</span>
             <select
@@ -209,12 +239,17 @@ export function SettingsPageClient() {
               onChange={(e) => setTimezone(e.target.value)}
             >
               <option value="UTC">UTC</option>
-              <option value="America/Mexico_City">America/Mexico_City</option>
-              <option value="America/New_York">America/New_York</option>
+              <option value="America/Mexico_City">
+                America/Mexico_City
+              </option>
+              <option value="America/New_York">
+                America/New_York
+              </option>
               <option value="Europe/Madrid">Europe/Madrid</option>
             </select>
           </label>
 
+          {/* Formato fecha */}
           <label className="block space-y-2 text-sm">
             <span className="text-muted">{copy.dateFormat}</span>
             <select
@@ -234,3 +269,4 @@ export function SettingsPageClient() {
     </div>
   );
 }
+
