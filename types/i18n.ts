@@ -10,6 +10,7 @@ export type Dictionary = {
     spareParts: string;
     technicians: string;
     generalNotes: string;
+    finances: string;
     settings: string;
   };
   auth: {

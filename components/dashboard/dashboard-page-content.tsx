@@ -307,7 +307,7 @@ export function DashboardPageContent({ metrics }: DashboardPageContentProps) {
 
   return (
     <div className="space-y-6">
-      <DashboardHero description={dictionary.dashboard.description} title={dictionary.dashboard.title} />
+      <DashboardHero description={dictionary.dashboard.description} title={dictionary.dashboard.title} showEditButton />
 
       <DashboardSummary labels={dictionary.dashboard} metrics={liveMetrics} />
       {user?.companies && (isGod(user?.role) || user.companies.length > 1) ? <CompanyViewsPanel /> : null}

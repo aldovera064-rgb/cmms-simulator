@@ -11,6 +11,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       spareParts: "Refacciones",
       technicians: "Técnicos",
       generalNotes: "Bitácora general",
+      finances: "Finanzas",
       settings: "Configuración"
     },
     auth: {
@@ -79,6 +80,7 @@ export const dictionaries: Record<Locale, Dictionary> = {
       spareParts: "Spare Parts",
       technicians: "Technicians",
       generalNotes: "General logbook",
+      finances: "Finances",
       settings: "Settings"
     },
     auth: {

@@ -2,8 +2,13 @@
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 
+import { PMPlanFormModal } from "@/components/pm-plans/pm-plan-form-modal";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Panel } from "@/components/ui/panel";
+import { useToast } from "@/components/ui/toast-context";
+import { useCover } from "@/lib/cover-context";
+import { formatDateGlobal } from "@/lib/format-date";
 import { applyCompanyFilter, getScopedCompanyId } from "@/lib/company";
 import { ensureSeedData, fetchAssets, fetchPmPlanHistory, type PmPlanHistoryRow } from "@/lib/cmms-data";
 import { useI18n } from "@/lib/i18n/context";
@@ -164,6 +169,11 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
   const [dateError, setDateError] = useState("");
   const canMutate = canEditModule(user?.role, "pm_plans");
   const readOnly = isReadOnlyRole(user?.role);
+  const { cover } = useCover();
+  const { showToast } = useToast();
+  const hasCover = Boolean(cover.url);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const copy =
     locale === "en"
@@ -390,29 +400,33 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
     setFormOpen(true);
   };
 
-  const handleDelete = async (planId: string) => {
-    if (!canMutate) return;
+  const handleDeleteConfirm = async () => {
+    if (!canMutate || !deleteTarget) return;
+    setDeleteLoading(true);
 
     // Save snapshot before soft delete
-    const plan = plans.find((p) => p.id === planId);
-    await savePmPlanSnapshot(planId, "deleted", plan ? "active" : "unknown");
+    const plan = plans.find((p) => p.id === deleteTarget);
+    await savePmPlanSnapshot(deleteTarget, "deleted", plan ? "active" : "unknown");
 
     // Soft delete
     await supabase
       .from("pm_plans")
       .update({ is_active: false, deleted_at: new Date().toISOString() })
-      .eq("id", planId)
+      .eq("id", deleteTarget)
       .eq("company_id", activeCompanyId);
 
-    setPlans((current) => current.filter((p) => p.id !== planId));
+    setPlans((current) => current.filter((p) => p.id !== deleteTarget));
 
-    if (editingId === planId) {
+    if (editingId === deleteTarget) {
       resetForm();
     }
 
     // Refresh history
     const historyRows = await fetchPmPlanHistory(activeCompanyId);
     setHistory(historyRows);
+    setDeleteTarget(null);
+    setDeleteLoading(false);
+    showToast("Plan eliminado", "success");
   };
 
   const handleComplete = async (plan: PMPlan) => {
@@ -446,12 +460,19 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
 
   return (
     <div className="space-y-6">
-      <Panel className="industrial-grid overflow-hidden p-8 border-[#d6d0b8]">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <Panel className="relative overflow-hidden p-8 border-[#d6d0b8]">
+        {hasCover && (
+          <>
+            <img src={cover.url!} alt="" className="absolute inset-0 h-full w-full object-cover pointer-events-none" style={{ objectPosition: cover.position, transform: `scale(${cover.scale})`, transformOrigin: cover.position }} draggable={false} />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/40 to-black/60 pointer-events-none" />
+          </>
+        )}
+        {!hasCover && <div className="absolute inset-0 industrial-grid pointer-events-none" />}
+        <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl space-y-3">
-            <p className="text-xs uppercase tracking-[0.28em] text-accent">{copy.sectionLabel}</p>
-            <h1 className="text-3xl font-semibold tracking-tight">{copy.title}</h1>
-            <p className="text-sm text-muted">{copy.subtitle}</p>
+            <p className={`text-xs uppercase tracking-[0.28em] ${hasCover ? "text-white/80" : "text-accent"}`}>{copy.sectionLabel}</p>
+            <h1 className={`text-3xl font-semibold tracking-tight ${hasCover ? "text-white" : ""}`}>{copy.title}</h1>
+            <p className={`text-sm ${hasCover ? "text-white/80" : "text-muted"}`}>{copy.subtitle}</p>
           </div>
 
           <div className="flex gap-2">
@@ -464,73 +485,53 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
       </Panel>
 
       {formOpen && (
-        <Panel className="p-6 border-[#d6d0b8] bg-[#f8f6ea]">
-          <form className="grid gap-4 md:grid-cols-[1fr_1fr_160px_180px_auto] md:items-end" onSubmit={handleSubmit}>
-            <label className="space-y-2 text-sm">
-              <span className="text-muted">{copy.asset}</span>
-              <select
-                className="w-full rounded-2xl border border-border bg-panelAlt px-3 py-2.5 text-sm outline-none focus:border-accent"
-                value={assetId}
-                onChange={(event) => setAssetId(event.target.value)}
-                disabled={readOnly}
-              >
-                <option value="">{copy.selectAsset}</option>
-                {assets.map((asset) => (
-                  <option key={asset.id} value={asset.id}>
-                    {asset.tag} - {asset.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+        <PMPlanFormModal
+          open={formOpen}
+          onClose={() => setFormOpen(false)}
+          onSubmit={async (values) => {
+            if (!canMutate || !activeCompanyId) return;
+            setDateError("");
 
-            <label className="space-y-2 text-sm">
-              <span className="text-muted">{copy.planName}</span>
-              <input
-                className="w-full rounded-2xl border border-border bg-panelAlt px-3 py-2.5 outline-none focus:border-accent"
-                placeholder="Ej. Revisión trimestral"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                disabled={readOnly}
-              />
-            </label>
+            const parsedNextRun = parseDateOnly(values.nextRunDate);
+            if (!parsedNextRun) return;
 
-            <label className="space-y-2 text-sm">
-              <span className="text-muted">{copy.frequency}</span>
-              <input
-                type="number"
-                min="1"
-                className="w-full rounded-2xl border border-border bg-panelAlt px-3 py-2.5 outline-none focus:border-accent"
-                value={frequency}
-                onChange={(event) => setFrequency(event.target.value)}
-                disabled={readOnly}
-              />
-            </label>
+            if (editingId) {
+              const currentPlan = plans.find((p) => p.id === editingId);
+              if (currentPlan?.lastRun) {
+                const lastRunDate = parseDateOnly(currentPlan.lastRun);
+                if (lastRunDate && parsedNextRun <= lastRunDate) {
+                  setDateError(copy.dateError);
+                  return;
+                }
+              }
+            }
 
-            <label className="space-y-2 text-sm">
-              <span className="text-muted">{copy.nextRun}</span>
-              <input
-                type="date"
-                className="w-full rounded-2xl border border-border bg-panelAlt px-3 py-2.5 outline-none focus:border-accent"
-                value={nextRunDate}
-                onChange={(event) => {
-                  setNextRunDate(event.target.value);
-                  setDateError("");
-                }}
-                disabled={readOnly}
-              />
-            </label>
+            const payload = {
+              asset_id: values.assetId,
+              name: values.name,
+              frequency: values.frequency,
+              next_run: toDateOnlyISO(parsedNextRun)
+            };
 
-            <div className="flex gap-2">
-              <Button type="submit" disabled={readOnly}>
-                {editingId ? copy.save : copy.create}
-              </Button>
-              <Button type="button" variant="secondary" onClick={() => setFormOpen(false)}>
-                {copy.cancel}
-              </Button>
-            </div>
-          </form>
-          {dateError && <p className="mt-2 text-sm text-danger">{dateError}</p>}
-        </Panel>
+            if (editingId) {
+              await supabase.from("pm_plans").update(payload).eq("id", editingId).eq("company_id", activeCompanyId);
+            } else {
+              const { data, error } = await supabase.from("pm_plans").insert([{ ...payload, last_run: null, company_id: companyIdForWrite }]).select("id").single();
+              if (!error && data) {
+                await savePmPlanSnapshot(data.id, "created", "active");
+              }
+            }
+
+            const nextPlans = await fetchPlans(activeCompanyId);
+            setPlans(sortPlans(nextPlans));
+            resetForm();
+            showToast(editingId ? "Plan actualizado" : "Plan creado", "success");
+          }}
+          assets={assets}
+          initial={editingId ? { assetId, name, frequency: Number(frequency), nextRunDate } : null}
+          locale={locale}
+          dateError={dateError}
+        />
       )}
 
       <Panel className="border-[#d6d0b8] bg-[#f8f6ea]">
@@ -577,7 +578,7 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
                             {copy.complete}
                           </Button>
                           <Button onClick={() => handleEdit(plan)}>{copy.edit}</Button>
-                          <Button variant="danger" onClick={() => handleDelete(plan.id)}>
+                          <Button variant="danger" onClick={() => setDeleteTarget(plan.id)}>
                             {copy.remove}
                           </Button>
                         </div>
@@ -669,6 +670,16 @@ export function PMPlansPageClient({ initialPlans }: PMPlansPageClientProps) {
           </div>
         </Panel>
       )}
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title={locale === "en" ? "Confirm deletion" : "Confirmar eliminación"}
+        description={locale === "en" ? "Delete this maintenance plan?" : "¿Eliminar este plan de mantenimiento?"}
+        confirmLabel={copy.remove}
+        loading={deleteLoading}
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

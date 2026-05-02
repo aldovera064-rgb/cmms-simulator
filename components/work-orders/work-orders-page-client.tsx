@@ -10,6 +10,8 @@ import { WorkOrderStatusBadge } from "@/components/work-orders/work-order-status
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import { Select } from "@/components/ui/select";
+import { useCover } from "@/lib/cover-context";
+import { formatDateGlobal } from "@/lib/format-date";
 import { getScopedCompanyId } from "@/lib/company";
 import { ensureSeedData, fetchAssets, fetchTechnicians, fetchWorkOrders, fetchWorkOrderHistory, type WorkOrderHistoryRow } from "@/lib/cmms-data";
 import { useI18n } from "@/lib/i18n/context";
@@ -103,17 +105,17 @@ function mapWorkOrder(row: {
   };
 }
 
+// Use global date formatting
 function formatHistoryDate(value: string) {
-  return new Intl.DateTimeFormat("es-MX", {
-    dateStyle: "medium",
-    timeStyle: "short"
-  }).format(new Date(value));
+  return formatDateGlobal(value, true);
 }
 
 export function WorkOrdersPageClient({ initialWorkOrders }: Props) {
   const { locale } = useI18n();
   const { user } = useSession();
+  const { cover } = useCover();
   const activeCompanyId = user?.activeCompanyId ?? null;
+  const hasCover = Boolean(cover.url);
   const companyIdForWrite = getScopedCompanyId(activeCompanyId);
   const [assets, setAssets] = useState<AssetOption[]>([]);
   const [technicians, setTechnicians] = useState<TechnicianOption[]>([]);
@@ -424,13 +426,22 @@ export function WorkOrdersPageClient({ initialWorkOrders }: Props) {
 
   return (
     <div className="space-y-6">
-      <Panel className="p-6 flex justify-between items-center border-[#d6d0b8] bg-[#f8f6ea]">
-        <h1 className="text-2xl font-semibold">{copy.title}</h1>
-        <div className="flex gap-2">
-          <Button variant="secondary" onClick={() => setShowHistory(!showHistory)}>
-            {showHistory ? copy.historyHide : copy.historyToggle}
-          </Button>
-          {canMutate ? <Button onClick={() => setCreateOpen(true)}>{copy.newOt}</Button> : null}
+      <Panel className="relative overflow-hidden p-6 border-[#d6d0b8]">
+        {hasCover && (
+          <>
+            <img src={cover.url!} alt="" className="absolute inset-0 h-full w-full object-cover pointer-events-none" style={{ objectPosition: cover.position, transform: `scale(${cover.scale})`, transformOrigin: cover.position }} draggable={false} />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/40 to-black/60 pointer-events-none" />
+          </>
+        )}
+        {!hasCover && <div className="absolute inset-0 industrial-grid pointer-events-none" />}
+        <div className="relative z-10 flex justify-between items-center">
+          <h1 className={`text-2xl font-semibold ${hasCover ? "text-white" : ""}`}>{copy.title}</h1>
+          <div className="flex gap-2">
+            <Button variant="secondary" onClick={() => setShowHistory(!showHistory)}>
+              {showHistory ? copy.historyHide : copy.historyToggle}
+            </Button>
+            {canMutate ? <Button onClick={() => setCreateOpen(true)}>{copy.newOt}</Button> : null}
+          </div>
         </div>
       </Panel>
 

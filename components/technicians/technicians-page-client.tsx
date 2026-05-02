@@ -1,9 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 
+import { TechnicianFormModal } from "@/components/technicians/technician-form-modal";
 import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Panel } from "@/components/ui/panel";
+import { useToast } from "@/components/ui/toast-context";
+import { useCover } from "@/lib/cover-context";
+import { formatDateGlobal } from "@/lib/format-date";
 import { getScopedCompanyId } from "@/lib/company";
 import { ensureSeedData, fetchTechnicians } from "@/lib/cmms-data";
 import { useI18n } from "@/lib/i18n/context";
@@ -36,17 +41,19 @@ function mapTechnician(row: { id: string; name: string | null; skill: string | n
 export function TechniciansPageClient({ initialTechnicians }: TechniciansPageClientProps) {
   const { locale } = useI18n();
   const { user } = useSession();
+  const { cover } = useCover();
+  const { showToast } = useToast();
   const activeCompanyId = user?.activeCompanyId ?? null;
   const companyIdForWrite = getScopedCompanyId(activeCompanyId);
   const [technicians, setTechnicians] = useState<Technician[]>(initialTechnicians);
-  const [name, setName] = useState("");
-  const [specialty, setSpecialty] = useState("");
-  const [phone, setPhone] = useState("");
-  const [hireDate, setHireDate] = useState("");
   const [formOpen, setFormOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingTechnician, setEditingTechnician] = useState<Technician | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Technician | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [saving, setSaving] = useState(false);
   const canMutate = canEditModule(user?.role, "technicians");
   const readOnly = !canMutate;
+  const hasCover = Boolean(cover.url);
 
   const copy =
     locale === "en"
@@ -54,8 +61,6 @@ export function TechniciansPageClient({ initialTechnicians }: TechniciansPageCli
           registry: "Technician Registry",
           title: "Technicians",
           create: "Create technician",
-          save: "Save",
-          cancel: "Cancel",
           name: "Name",
           specialty: "Specialty",
           phone: "Phone",
@@ -63,14 +68,14 @@ export function TechniciansPageClient({ initialTechnicians }: TechniciansPageCli
           actions: "Actions",
           edit: "Edit",
           remove: "Delete",
-          empty: "No technicians"
+          empty: "No technicians",
+          deleteTitle: "Confirm deletion",
+          deleteDesc: "Delete this technician?"
         }
       : {
           registry: "Registro de Técnicos",
           title: "Técnicos",
           create: "Crear técnico",
-          save: "Guardar",
-          cancel: "Cancelar",
           name: "Nombre",
           specialty: "Especialidad",
           phone: "Teléfono",
@@ -78,7 +83,9 @@ export function TechniciansPageClient({ initialTechnicians }: TechniciansPageCli
           actions: "Acciones",
           edit: "Editar",
           remove: "Eliminar",
-          empty: "No hay técnicos registrados"
+          empty: "No hay técnicos registrados",
+          deleteTitle: "Confirmar eliminación",
+          deleteDesc: "¿Eliminar este técnico?"
         };
 
   useEffect(() => {
@@ -100,42 +107,47 @@ export function TechniciansPageClient({ initialTechnicians }: TechniciansPageCli
     return [...technicians].sort((a, b) => a.name.localeCompare(b.name));
   }, [technicians]);
 
-  const resetForm = () => {
-    setName("");
-    setSpecialty("");
-    setPhone("");
-    setHireDate("");
-    setEditingId(null);
-    setFormOpen(false);
+  const openCreate = () => {
+    setEditingTechnician(null);
+    setFormOpen(true);
   };
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+  const openEdit = (technician: Technician) => {
+    if (!canMutate) return;
+    setEditingTechnician(technician);
+    setFormOpen(true);
+  };
+
+  const handleSubmit = async (values: { name: string; specialty: string; phone: string; hireDate: string }) => {
     if (!canMutate || !activeCompanyId) return;
-    event.preventDefault();
+    setSaving(true);
 
-    const trimmedName = name.trim();
-    const trimmedSpecialty = specialty.trim();
+    const trimmedName = values.name.trim();
+    const trimmedSpecialty = values.specialty.trim();
 
-    if (!trimmedName || !trimmedSpecialty) return;
+    if (!trimmedName || !trimmedSpecialty) {
+      setSaving(false);
+      return;
+    }
 
-    if (editingId) {
+    if (editingTechnician) {
       await supabase
         .from("technicians")
         .update({
           name: trimmedName,
           skill: trimmedSpecialty,
-          phone: phone.trim() || null,
-          hire_date: hireDate || null,
+          phone: values.phone.trim() || null,
+          hire_date: values.hireDate || null,
           company_id: companyIdForWrite
         })
-        .eq("id", editingId)
+        .eq("id", editingTechnician.id)
         .eq("company_id", activeCompanyId);
     } else {
       await supabase.from("technicians").insert([{
         name: trimmedName,
         skill: trimmedSpecialty,
-        phone: phone.trim() || null,
-        hire_date: hireDate || null,
+        phone: values.phone.trim() || null,
+        hire_date: values.hireDate || null,
         company_id: companyIdForWrite
       }]);
       await ensureTechnicianAdminUser(trimmedName);
@@ -143,86 +155,41 @@ export function TechniciansPageClient({ initialTechnicians }: TechniciansPageCli
 
     const rows = await fetchTechnicians(activeCompanyId);
     setTechnicians(rows.map(mapTechnician));
-    resetForm();
+    setFormOpen(false);
+    setEditingTechnician(null);
+    setSaving(false);
+    showToast(editingTechnician ? "Técnico actualizado" : "Técnico creado", "success");
   };
 
-  const handleEdit = (technician: Technician) => {
-    if (!canMutate) return;
-    setEditingId(technician.id);
-    setName(technician.name);
-    setSpecialty(technician.specialty);
-    setPhone(technician.phone);
-    setHireDate(technician.hireDate);
-    setFormOpen(true);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  };
-
-  const handleDelete = async (id: string) => {
-    if (!canMutate) return;
-    await supabase.from("technicians").delete().eq("id", id).eq("company_id", activeCompanyId);
-    setTechnicians((current) => current.filter((technician) => technician.id !== id));
-    if (editingId === id) resetForm();
+  const confirmDelete = async () => {
+    if (!canMutate || !deleteTarget) return;
+    setDeleting(true);
+    await supabase.from("technicians").delete().eq("id", deleteTarget.id).eq("company_id", activeCompanyId);
+    setTechnicians((current) => current.filter((t) => t.id !== deleteTarget.id));
+    setDeleteTarget(null);
+    setDeleting(false);
+    showToast("Técnico eliminado", "success");
   };
 
   return (
     <div className="space-y-6">
-      <Panel className="industrial-grid overflow-hidden p-8 border-[#d6d0b8]">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <Panel className="relative overflow-hidden p-8 border-[#d6d0b8]">
+        {hasCover && (
+          <>
+            <img src={cover.url!} alt="" className="absolute inset-0 h-full w-full object-cover pointer-events-none" style={{ objectPosition: cover.position, transform: `scale(${cover.scale})`, transformOrigin: cover.position }} draggable={false} />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/40 to-black/60 pointer-events-none" />
+          </>
+        )}
+        {!hasCover && <div className="absolute inset-0 industrial-grid pointer-events-none" />}
+        <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="space-y-3">
-            <p className="text-xs uppercase tracking-[0.28em] text-accent">{copy.registry}</p>
-            <h1 className="text-3xl font-semibold">{copy.title}</h1>
+            <p className={`text-xs uppercase tracking-[0.28em] ${hasCover ? "text-white/80" : "text-accent"}`}>{copy.registry}</p>
+            <h1 className={`text-3xl font-semibold ${hasCover ? "text-white" : ""}`}>{copy.title}</h1>
           </div>
 
-          {canMutate ? <Button onClick={() => { resetForm(); setFormOpen(true); }}>{copy.create}</Button> : null}
+          {canMutate ? <Button onClick={openCreate}>{copy.create}</Button> : null}
         </div>
       </Panel>
-
-      {formOpen && (
-        <Panel className="p-6 border-[#d6d0b8] bg-[#f8f6ea]">
-          <form className="grid gap-4 md:grid-cols-[1fr_1fr_1fr_1fr_auto_auto]" onSubmit={handleSubmit}>
-            <input
-              className="rounded-2xl border border-border px-3 py-2"
-              placeholder={copy.name}
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              disabled={readOnly}
-            />
-
-            <input
-              className="rounded-2xl border border-border px-3 py-2"
-              placeholder={copy.specialty}
-              value={specialty}
-              onChange={(event) => setSpecialty(event.target.value)}
-              disabled={readOnly}
-            />
-
-            <input
-              className="rounded-2xl border border-border px-3 py-2"
-              placeholder={copy.phone}
-              value={phone}
-              onChange={(event) => setPhone(event.target.value)}
-              disabled={readOnly}
-            />
-
-            <input
-              className="rounded-2xl border border-border px-3 py-2"
-              type="date"
-              value={hireDate}
-              onChange={(event) => setHireDate(event.target.value)}
-              disabled={readOnly}
-              title={copy.hireDate}
-            />
-
-            <Button type="submit" disabled={readOnly}>
-              {editingId ? copy.save : copy.create}
-            </Button>
-
-            <Button type="button" variant="secondary" onClick={() => setFormOpen(false)}>
-              {copy.cancel}
-            </Button>
-          </form>
-        </Panel>
-      )}
 
       <Panel className="border-[#d6d0b8] bg-[#f8f6ea]">
         <div className="w-full overflow-x-auto">
@@ -243,14 +210,14 @@ export function TechniciansPageClient({ initialTechnicians }: TechniciansPageCli
                   <td className="px-4 py-2 text-left align-middle">{technician.name}</td>
                   <td className="px-4 py-2 text-left align-middle">{technician.specialty}</td>
                   <td className="px-4 py-2 text-left align-middle">{technician.phone || "-"}</td>
-                  <td className="px-4 py-2 text-left align-middle">{technician.hireDate || "-"}</td>
+                  <td className="px-4 py-2 text-left align-middle">{formatDateGlobal(technician.hireDate)}</td>
                   <td className="px-4 py-2 text-right align-middle">
                     {readOnly ? (
                       <span className="text-xs text-muted">Read only</span>
                     ) : (
                       <div className="flex justify-end gap-2">
-                        <Button onClick={() => handleEdit(technician)}>{copy.edit}</Button>
-                        <Button variant="danger" onClick={() => handleDelete(technician.id)}>
+                        <Button onClick={() => openEdit(technician)}>{copy.edit}</Button>
+                        <Button variant="danger" onClick={() => setDeleteTarget(technician)}>
                           {copy.remove}
                         </Button>
                       </div>
@@ -270,6 +237,25 @@ export function TechniciansPageClient({ initialTechnicians }: TechniciansPageCli
           </table>
         </div>
       </Panel>
+
+      <TechnicianFormModal
+        open={formOpen}
+        onClose={() => { setFormOpen(false); setEditingTechnician(null); }}
+        onSubmit={handleSubmit}
+        initial={editingTechnician ? { name: editingTechnician.name, specialty: editingTechnician.specialty, phone: editingTechnician.phone, hireDate: editingTechnician.hireDate } : null}
+        loading={saving}
+        locale={locale}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        title={copy.deleteTitle}
+        description={`${copy.deleteDesc} ${deleteTarget?.name ?? ""}`}
+        confirmLabel={copy.remove}
+        loading={deleting}
+        onConfirm={confirmDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

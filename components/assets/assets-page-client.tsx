@@ -4,10 +4,12 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { AssetFormModal } from "@/components/assets/asset-form-modal";
+import { PFCurveModal } from "@/components/assets/pf-curve-modal";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { CriticalityBadge } from "@/components/ui/criticality-badge";
 import { Panel } from "@/components/ui/panel";
+import { useCover } from "@/lib/cover-context";
 import { ensureSeedData, fetchAssets } from "@/lib/cmms-data";
 import { useI18n } from "@/lib/i18n/context";
 import { canEditModule, isReadOnlyRole } from "@/lib/rbac";
@@ -65,11 +67,13 @@ function mapAsset(row: {
 export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
   const { locale } = useI18n();
   const { user } = useSession();
+  const { cover } = useCover();
   const activeCompanyId = user?.activeCompanyId ?? null;
   const [assets, setAssets] = useState<AssetListItem[]>(initialAssets);
   const [editingAsset, setEditingAsset] = useState<AssetListItem | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<AssetListItem | null>(null);
+  const [pfTarget, setPfTarget] = useState<AssetListItem | null>(null);
   const [formError, setFormError] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -77,6 +81,7 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
   const [now, setNow] = useState(Date.now());
   const canMutateAssets = canEditModule(user?.role, "assets");
   const readOnly = isReadOnlyRole(user?.role);
+  const hasCover = Boolean(cover.url);
 
   const copy =
     locale === "en"
@@ -273,12 +278,19 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
 
   return (
     <div className="space-y-6">
-      <Panel className="industrial-grid overflow-hidden p-8 border-[#d6d0b8]">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <Panel className="relative overflow-hidden p-8 border-[#d6d0b8]">
+        {hasCover && (
+          <>
+            <img src={cover.url!} alt="" className="absolute inset-0 h-full w-full object-cover pointer-events-none" style={{ objectPosition: cover.position, transform: `scale(${cover.scale})`, transformOrigin: cover.position }} draggable={false} />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/40 to-black/60 pointer-events-none" />
+          </>
+        )}
+        {!hasCover && <div className="absolute inset-0 industrial-grid pointer-events-none" />}
+        <div className="relative z-10 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
           <div className="max-w-2xl space-y-3">
-            <p className="text-xs uppercase tracking-[0.28em] text-accent">{copy.registry}</p>
-            <h1 className="text-3xl font-semibold tracking-tight">{copy.title}</h1>
-            <p className="text-sm text-muted">{copy.subtitle}</p>
+            <p className={`text-xs uppercase tracking-[0.28em] ${hasCover ? "text-white/80" : "text-accent"}`}>{copy.registry}</p>
+            <h1 className={`text-3xl font-semibold tracking-tight ${hasCover ? "text-white" : ""}`}>{copy.title}</h1>
+            <p className={`text-sm ${hasCover ? "text-white/80" : "text-muted"}`}>{copy.subtitle}</p>
           </div>
 
           {canMutateAssets ? <Button onClick={openCreateModal}>{copy.newAsset}</Button> : null}
@@ -333,6 +345,7 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
                         <span className="text-xs text-muted">Read only</span>
                       ) : (
                         <div className="flex justify-end gap-2">
+                          <Button variant="secondary" onClick={() => setPfTarget(asset)}>P-F</Button>
                           <Button onClick={() => openEditModal(asset)}>{copy.edit}</Button>
                           <Button variant="danger" onClick={() => setDeleteTarget(asset)}>
                             {copy.remove}
@@ -374,6 +387,21 @@ export function AssetsPageClient({ initialAssets }: AssetsPageClientProps) {
         onConfirm={confirmDelete}
         onCancel={() => setDeleteTarget(null)}
       />
+
+      {pfTarget && (
+        <PFCurveModal
+          open={Boolean(pfTarget)}
+          onClose={() => setPfTarget(null)}
+          asset={{
+            name: pfTarget.name,
+            tag: pfTarget.tag,
+            temperature: pfTarget.temperature,
+            vibration: pfTarget.vibration,
+            pressure: pfTarget.pressure,
+            alertThreshold: pfTarget.alertThreshold
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -12,6 +12,7 @@ import { Panel } from "@/components/ui/panel";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { FailureTrendCard } from "@/components/assets/failure-trend-card";
+import { formatDateGlobal } from "@/lib/format-date";
 import { AssetApiError, AssetDetail, AssetStatus } from "@/types/assets";
 
 type AssetDetailClientProps = {
@@ -324,8 +325,5 @@ function Field({
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("es-MX", {
-    dateStyle: "medium",
-    timeStyle: "short"
-  }).format(new Date(value));
+  return formatDateGlobal(value, true);
 }

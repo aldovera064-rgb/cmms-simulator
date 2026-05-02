@@ -4,6 +4,8 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
+import { useToast } from "@/components/ui/toast-context";
+import { useCover } from "@/lib/cover-context";
 import { useI18n } from "@/lib/i18n/context";
 
 const THEMES = [
@@ -27,6 +29,8 @@ const UNIT_GROUPS = {
 
 export function SettingsPageClient() {
   const { locale, setLocale } = useI18n();
+  const { showToast } = useToast();
+  const { cover } = useCover();
 
   const [theme, setTheme] = useState("theme-default");
   const [unitCategory, setUnitCategory] =
@@ -35,6 +39,8 @@ export function SettingsPageClient() {
   const [freq, setFreq] = useState("30");
   const [timezone, setTimezone] = useState("UTC");
   const [dateFormat, setDateFormat] = useState("YYYY-MM-DD");
+
+  const hasCover = Boolean(cover.url);
 
   const copy =
     locale === "en"
@@ -129,7 +135,7 @@ export function SettingsPageClient() {
     document.documentElement.classList.remove(...THEMES);
     document.documentElement.classList.add(theme);
 
-    alert(copy.saved);
+    showToast(copy.saved, "success");
   };
 
   const handleLanguageChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -138,15 +144,22 @@ export function SettingsPageClient() {
 
   return (
     <div className="space-y-6">
-      <Panel className="industrial-grid overflow-hidden p-8 border-[#d6d0b8]">
-        <div className="space-y-3">
-          <p className="text-xs uppercase tracking-[0.28em] text-accent">
+      <Panel className="relative overflow-hidden p-8 border-[#d6d0b8]">
+        {hasCover && (
+          <>
+            <img src={cover.url!} alt="" className="absolute inset-0 h-full w-full object-cover pointer-events-none" style={{ objectPosition: cover.position, transform: `scale(${cover.scale})`, transformOrigin: cover.position }} draggable={false} />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/40 to-black/60 pointer-events-none" />
+          </>
+        )}
+        {!hasCover && <div className="absolute inset-0 industrial-grid pointer-events-none" />}
+        <div className="relative z-10 space-y-3">
+          <p className={`text-xs uppercase tracking-[0.28em] ${hasCover ? "text-white/80" : "text-accent"}`}>
             Config
           </p>
-          <h1 className="text-3xl font-semibold tracking-tight">
+          <h1 className={`text-3xl font-semibold tracking-tight ${hasCover ? "text-white" : ""}`}>
             {copy.title}
           </h1>
-          <p className="text-sm text-muted">{copy.subtitle}</p>
+          <p className={`text-sm ${hasCover ? "text-white/80" : "text-muted"}`}>{copy.subtitle}</p>
         </div>
       </Panel>
 

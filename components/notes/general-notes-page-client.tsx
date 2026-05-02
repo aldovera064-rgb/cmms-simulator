@@ -5,6 +5,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import { Textarea } from "@/components/ui/textarea";
+import { useCover } from "@/lib/cover-context";
 import { applyCompanyFilter, getScopedCompanyId } from "@/lib/company";
 import { useSession } from "@/lib/session/context";
 import { supabase } from "@/lib/supabase";
@@ -21,6 +22,8 @@ type Props = {
 
 export function GeneralNotesPageClient({ initialNotes = [] }: Props) {
   const { user } = useSession();
+  const { cover } = useCover();
+  const hasCover = Boolean(cover.url);
   const activeCompanyId = user?.activeCompanyId ?? null;
   const companyIdForWrite = getScopedCompanyId(activeCompanyId);
   const [notes, setNotes] = useState<GeneralNote[]>(initialNotes);
@@ -70,11 +73,18 @@ export function GeneralNotesPageClient({ initialNotes = [] }: Props) {
 
   return (
     <div className="space-y-6">
-      <Panel className="industrial-grid overflow-hidden p-8 border-[#d6d0b8]">
-        <div className="space-y-3">
-          <p className="text-xs uppercase tracking-[0.28em] text-accent">Bitácora general</p>
-          <h1 className="text-3xl font-semibold tracking-tight">Notas por empresa</h1>
-          <p className="text-sm text-muted">Registro general para incidencias, cambios operativos y comunicación del turno.</p>
+      <Panel className="relative overflow-hidden p-8 border-[#d6d0b8]">
+        {hasCover && (
+          <>
+            <img src={cover.url!} alt="" className="absolute inset-0 h-full w-full object-cover pointer-events-none" style={{ objectPosition: cover.position, transform: `scale(${cover.scale})`, transformOrigin: cover.position }} draggable={false} />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/40 to-black/60 pointer-events-none" />
+          </>
+        )}
+        {!hasCover && <div className="absolute inset-0 industrial-grid pointer-events-none" />}
+        <div className="relative z-10 space-y-3">
+          <p className={`text-xs uppercase tracking-[0.28em] ${hasCover ? "text-white/80" : "text-accent"}`}>Bitácora general</p>
+          <h1 className={`text-3xl font-semibold tracking-tight ${hasCover ? "text-white" : ""}`}>Notas por empresa</h1>
+          <p className={`text-sm ${hasCover ? "text-white/80" : "text-muted"}`}>Registro general para incidencias, cambios operativos y comunicación del turno.</p>
         </div>
       </Panel>
 
